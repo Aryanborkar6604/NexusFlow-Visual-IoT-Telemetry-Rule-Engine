@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # NexusFlow backend
 
 Node.js/Express backend for telemetry ingestion, MongoDB time-series storage, and dynamically compiled RxJS rules. The frontend can POST serialized React Flow graphs and stream live telemetry/alerts over WebSockets.
@@ -51,3 +52,7 @@ Connect to `/ws`. Send `{ "type":"telemetry", "data":{...telemetry point...} }` 
 ## Deployment notes
 
 The telemetry write queue is in-memory and tuned by `TELEMETRY_BATCH_SIZE` and `TELEMETRY_FLUSH_MS`; use a durable queue for lossless ingestion across process crashes or multiple replicas. Configure authentication, authorization, and per-device credentials before exposing ingestion or rule management publicly. MongoDB time-series collections are append-oriented and don't support every ordinary collection operation.
+=======
+# NexusFlow-Visual-IoT-Telemetry-Rule-Engine
+NexusFlow is a no-code IoT monitoring and automation platform that allows users to create visual workflows using drag-and-drop nodes. It processes real-time sensor data using Node.js, RxJS, and MongoDB, enabling dynamic rule execution, live monitoring, anomaly detection, and automated alerts.
+>>>>>>> 7347b6601bc23bc16d607f8966875b258d892495
