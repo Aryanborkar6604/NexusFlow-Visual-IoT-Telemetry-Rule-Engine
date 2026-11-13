@@ -1,8 +1,6 @@
-# NexusFlow — No-Code IoT Automation Platform
+# NexusFlow-Visual-IoT-Telemetry-Rule-Engine
 
-NexusFlow is a no-code IoT automation platform designed for factory floor managers to monitor telemetry (temperature, pressure, humidity), smooth noisy sensor streams with moving averages, evaluate threshold conditions, and dispatch real-time alerts without writing code.
-
----
+NexusFlow is a no-code IoT monitoring and automation platform that allows users to create visual workflows using drag-and-drop nodes. It processes real-time sensor data using Node.js, RxJS, and MongoDB, enabling dynamic rule execution, live monitoring, anomaly detection, and automated alerts.
 
 ## Architecture Overview
 
@@ -11,8 +9,6 @@ NexusFlow is a no-code IoT automation platform designed for factory floor manage
 - **Stream Compiler**: Validates DAG topology (DFS cycle detection), maps allowlisted operators (Zero `eval`), and executes compiled RxJS pipelines with sub-second latency.
 - **Alert Engine**: SMS delivery via Twilio or Console Mock Logger with automatic debouncing and Socket.IO broadcast.
 - **Simulator**: Generates realistic telemetry streams for multiple factory units with simulated spikes.
-
----
 
 ## Quick Start Guide
 
@@ -45,8 +41,6 @@ npm run dev:client
 
 Open your browser at `http://localhost:5173`.
 
----
-
 ## 2-Minute Live Demo Runbook
 
 1. **Dashboard**: Navigate to `/` to watch live turbine telemetry graphs streaming via Socket.IO.
@@ -63,9 +57,8 @@ Open your browser at `http://localhost:5173`.
    - Alert toast pops up on screen with dispatch details.
    - Inspect the trigger row in the **Alert History** tab (`/history`).
 
----
-
 ## Security Guarantees
+
 - **Zero-Eval Engine**: Server strictly refuses dynamic string execution (`eval`, `new Function`, `vm.run*`).
 - **Strict DAG Validation**: Cyclical flows and disconnected nodes are rejected prior to compilation.
 - **Tenant Isolation**: Operations and Socket.IO rooms are partitioned by `factoryId`.
