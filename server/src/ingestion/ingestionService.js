@@ -28,13 +28,19 @@ export function ingestReading(reading, socketServer = null) {
     throw new Error('Telemetry reading missing deviceId');
   }
 
+  const safeNum = (val) => {
+    if (val === undefined || val === null) return undefined;
+    const n = Number(val);
+    return isNaN(n) ? undefined : n;
+  };
+
   const payload = {
     deviceId,
     factoryId,
     timestamp: new Date(timestamp),
-    temperature: reading.temperature !== undefined ? Number(reading.temperature) : undefined,
-    pressure: reading.pressure !== undefined ? Number(reading.pressure) : undefined,
-    humidity: reading.humidity !== undefined ? Number(reading.humidity) : undefined,
+    temperature: safeNum(reading.temperature),
+    pressure: safeNum(reading.pressure),
+    humidity: safeNum(reading.humidity),
   };
 
   // 1. Live stream broadcast (Hot path)

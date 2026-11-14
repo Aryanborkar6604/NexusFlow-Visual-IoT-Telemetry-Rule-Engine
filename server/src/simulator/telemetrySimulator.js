@@ -8,9 +8,9 @@ class TelemetrySimulator {
     this.intervalMs = 1500; // 1.5s interval for smooth demo view
     this.state = {
       TURBINE_001: { temp: 72.0, pressure: 115, humidity: 40 },
-      PUMP_002: { temp: 54.0, pressure: 95 },
-      BOILER_003: { temp: 92.0, pressure: 138 },
-      CONVEYOR_004: { temp: 37.0, humidity: 55 },
+      PUMP_002: { temp: 54.0, pressure: 95, humidity: 35 },
+      BOILER_003: { temp: 92.0, pressure: 138, humidity: 65 },
+      CONVEYOR_004: { temp: 37.0, pressure: 20, humidity: 55 },
     };
   }
 
