@@ -37,30 +37,44 @@ class TelemetrySimulator {
   }
 
   tick() {
-    // 1. Simulate TURBINE_001
-    const t = this.state.TURBINE_001;
-    // Small natural jitter around 72-76°C
-    t.temp = Math.round((t.temp + (Math.random() - 0.48) * 1.2) * 10) / 10;
-    if (t.temp < 65) t.temp = 68;
-    if (t.temp > 79) t.temp = 77; // Stay under 80 threshold unless spiked
+    // Simulate all 4 industrial equipment units
+    const deviceConfigs = [
+      { id: 'TURBINE_001', minT: 68, maxT: 78, baseP: 115, baseH: 40 },
+      { id: 'PUMP_002', minT: 50, maxT: 62, baseP: 95, baseH: 35 },
+      { id: 'BOILER_003', minT: 88, maxT: 96, baseP: 140, baseH: 65 },
+      { id: 'CONVEYOR_004', minT: 34, maxT: 42, baseP: 20, baseH: 52 },
+    ];
 
-    t.pressure = Math.round(t.pressure + (Math.random() - 0.5) * 2);
-    t.humidity = Math.round(t.humidity + (Math.random() - 0.5) * 1);
+    for (const dev of deviceConfigs) {
+      if (!this.state[dev.id]) {
+        this.state[dev.id] = { temp: (dev.minT + dev.maxT) / 2, pressure: dev.baseP, humidity: dev.baseH };
+      }
 
-    const reading = {
-      deviceId: 'TURBINE_001',
-      factoryId: 'FACTORY_01',
-      timestamp: new Date().toISOString(),
-      temperature: t.temp,
-      pressure: t.pressure,
-      humidity: t.humidity,
-    };
+      const st = this.state[dev.id];
+      // Jitter temperature
+      st.temp = Math.round((st.temp + (Math.random() - 0.49) * 1.4) * 10) / 10;
+      if (st.temp < dev.minT) st.temp = dev.minT + 0.5;
+      if (st.temp > dev.maxT) st.temp = dev.maxT - 0.5;
 
-    try {
-      const processed = ingestReading(reading, this.socketServer);
-      updateDeviceReading(processed);
-    } catch (err) {
-      console.error(`[Simulator] Ingest error: ${err.message}`);
+      // Jitter pressure & humidity
+      st.pressure = Math.round(st.pressure + (Math.random() - 0.5) * 2);
+      st.humidity = Math.round(st.humidity + (Math.random() - 0.5) * 1.5);
+
+      const reading = {
+        deviceId: dev.id,
+        factoryId: 'FACTORY_01',
+        timestamp: new Date().toISOString(),
+        temperature: st.temp,
+        pressure: st.pressure,
+        humidity: st.humidity,
+      };
+
+      try {
+        const processed = ingestReading(reading, this.socketServer);
+        updateDeviceReading(processed);
+      } catch (err) {
+        console.error(`[Simulator] Ingest error on ${dev.id}: ${err.message}`);
+      }
     }
   }
 

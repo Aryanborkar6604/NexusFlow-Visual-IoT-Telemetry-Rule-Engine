@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { alertService } from '../../src/services/alertService.js';
+import { Link } from 'react-router-dom';
+import { alertService } from '../services/alertService.js';
 import { useSocket } from '../context/SocketContext.jsx';
-import { Bell, Flame, Clock, RefreshCw } from 'lucide-react';
+import { Bell, Flame, Clock, RefreshCw, ExternalLink } from 'lucide-react';
 
 export function HistoryPage() {
   const [alerts, setAlerts] = useState([]);
@@ -70,6 +71,7 @@ export function HistoryPage() {
                 <th className="py-3 px-4">Trigger Value</th>
                 <th className="py-3 px-4">Action Message</th>
                 <th className="py-3 px-4">Status</th>
+                <th className="py-3 px-4 text-right">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60 font-mono">
@@ -100,6 +102,15 @@ export function HistoryPage() {
                       <span className="bg-emerald-950 text-emerald-300 border border-emerald-800/60 px-2 py-0.5 rounded-full text-[10px] uppercase font-bold">
                         {alert.status || 'fired'}
                       </span>
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      <Link
+                        to="/builder"
+                        className="inline-flex items-center gap-1 text-blue-400 hover:text-blue-300 font-sans hover:underline"
+                      >
+                        Canvas
+                        <ExternalLink className="w-3 h-3" />
+                      </Link>
                     </td>
                   </tr>
                 ))

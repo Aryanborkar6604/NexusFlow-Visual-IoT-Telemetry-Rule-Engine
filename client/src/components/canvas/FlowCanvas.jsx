@@ -18,6 +18,7 @@ import { NodePalette } from '../sidebar/NodePalette.jsx';
 import { PropertiesPanel } from '../sidebar/PropertiesPanel.jsx';
 import { useSocket } from '../../context/SocketContext.jsx';
 import { workflowService } from '../../services/workflowService.js';
+import { telemetryService } from '../../services/telemetryService.js';
 import { Play, Square, Save, CheckCircle, AlertTriangle, Sparkles } from 'lucide-react';
 
 const INITIAL_NODES = [
@@ -62,6 +63,7 @@ export function FlowCanvas({ initialWorkflowId = 'wf_turbine_01' }) {
   const [isRunning, setIsRunning] = useState(false);
   const [statusMessage, setStatusMessage] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
+  const [devices, setDevices] = useState([]);
 
   const { socket } = useSocket();
   const reactFlowWrapper = useRef(null);
@@ -72,6 +74,31 @@ export function FlowCanvas({ initialWorkflowId = 'wf_turbine_01' }) {
     condition: ConditionNode,
     sms: SmsAlertNode,
   }), []);
+
+  // Load existing workflow on mount
+  useEffect(() => {
+    let isMounted = true;
+    async function loadSavedWorkflow() {
+      try {
+        const [wf, devList] = await Promise.all([
+          workflowService.getWorkflow(workflowId).catch(() => null),
+          telemetryService.getDevices().catch(() => []),
+        ]);
+        if (!isMounted) return;
+        if (devList && devList.length > 0) setDevices(devList);
+        if (wf) {
+          if (wf.nodes && wf.nodes.length > 0) setNodes(wf.nodes);
+          if (wf.edges && wf.edges.length > 0) setEdges(wf.edges);
+          if (wf.name) setWorkflowName(wf.name);
+          if (wf.isRunning !== undefined) setIsRunning(wf.isRunning);
+        }
+      } catch (err) {
+        console.warn('Could not preload workflow, using defaults:', err.message);
+      }
+    }
+    loadSavedWorkflow();
+    return () => { isMounted = false; };
+  }, [workflowId, setNodes, setEdges]);
 
   // Connect handle to handle
   const onConnect = useCallback(
@@ -365,6 +392,7 @@ export function FlowCanvas({ initialWorkflowId = 'wf_turbine_01' }) {
         {/* Right: Properties Panel */}
         <PropertiesPanel
           selectedNode={selectedNode}
+          devices={devices}
           updateNodeData={updateNodeData}
           deleteNode={deleteNode}
           onClose={() => setSelectedNodeId(null)}

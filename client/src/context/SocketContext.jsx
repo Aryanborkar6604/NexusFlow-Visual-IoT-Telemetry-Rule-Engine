@@ -10,7 +10,8 @@ export function SocketProvider({ children }) {
   const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
-    const newSocket = io(window.location.origin, {
+    const socketUrl = window.location.hostname === 'localhost' ? 'http://localhost:5000' : window.location.origin;
+    const newSocket = io(socketUrl, {
       auth: { token },
       transports: ['websocket', 'polling'],
       reconnectionAttempts: 10,
