@@ -58,6 +58,9 @@ export function PropertiesPanel({ selectedNode, updateNodeData, deleteNode, onCl
                     <option value="PUMP_002">PUMP_002 (Coolant Pump)</option>
                     <option value="BOILER_003">BOILER_003 (Industrial Boiler)</option>
                     <option value="CONVEYOR_004">CONVEYOR_004 (Assembly Conveyor)</option>
+                    <option value="ROBOT_005">ROBOT_005 (6-Axis Robotic Arm)</option>
+                    <option value="COMPRESSOR_006">COMPRESSOR_006 (Rotary Air Compressor)</option>
+                    <option value="GENERATOR_007">GENERATOR_007 (Diesel Backup Generator)</option>
                   </>
                 )}
               </select>

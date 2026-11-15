@@ -8,6 +8,7 @@ import { pipelineManager } from './compiler/pipelineManager.js';
 import { alertEngine } from './alerts/alertEngine.js';
 import { setTelemetrySocketServer } from './controllers/telemetryController.js';
 import { setAlertSocketServer } from './controllers/alertController.js';
+import { setDeviceSocketServer } from './controllers/deviceController.js';
 import { simulator } from './simulator/telemetrySimulator.js';
 
 // Route imports
@@ -28,6 +29,7 @@ pipelineManager.setSocketServer(socketServer);
 alertEngine.setSocketServer(socketServer);
 setTelemetrySocketServer(socketServer);
 setAlertSocketServer(socketServer);
+setDeviceSocketServer(socketServer);
 simulator.setSocketServer(socketServer);
 
 // Global Middleware

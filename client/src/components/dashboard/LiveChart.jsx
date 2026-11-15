@@ -9,9 +9,9 @@ import {
   CartesianGrid,
   ReferenceLine,
 } from 'recharts';
-import { Activity, Thermometer, Gauge, Droplets } from 'lucide-react';
+import { Activity, Thermometer, Gauge, Droplets, Power } from 'lucide-react';
 
-export function LiveChart({ dataPoints = [], currentReading, deviceId = 'TURBINE_001', threshold = 80 }) {
+export function LiveChart({ dataPoints = [], currentReading, deviceId = 'TURBINE_001', isOnline = true, threshold = 80 }) {
   const [selectedMetric, setSelectedMetric] = useState('temperature');
 
   const chartData = dataPoints.map((dp, idx) => {
@@ -90,6 +90,16 @@ export function LiveChart({ dataPoints = [], currentReading, deviceId = 'TURBINE
           </div>
         </div>
       </div>
+
+      {!isOnline && (
+        <div className="mb-4 px-3.5 py-2.5 rounded-lg bg-amber-950/40 border border-amber-800/60 text-xs text-amber-300 flex items-center justify-between">
+          <span className="flex items-center gap-2 font-medium">
+            <Power className="w-4 h-4 text-amber-400" />
+            {deviceId} is currently Powered OFF (Standby)
+          </span>
+          <span className="text-[11px] text-amber-400/80 font-mono">Toggle switch to ON to resume telemetry</span>
+        </div>
+      )}
 
       {/* Chart Canvas */}
       <div className="h-72 w-full">

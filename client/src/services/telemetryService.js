@@ -17,4 +17,9 @@ export const telemetryService = {
     const res = await apiClient.post('/telemetry', reading);
     return res.data;
   },
+
+  async toggleDevice(deviceId) {
+    const res = await apiClient.post(`/devices/${deviceId}/toggle`);
+    return res.data;
+  },
 };

@@ -10,8 +10,11 @@ import { Activity, ShieldCheck, Cpu, Flame } from 'lucide-react';
 export function DashboardPage() {
   const [selectedDeviceId, setSelectedDeviceId] = useState('TURBINE_001');
   const [alerts, setAlerts] = useState([]);
-  const { dataPoints, currentReading, devices } = useTelemetry(selectedDeviceId, 30);
+  const { dataPoints, currentReading, devices, togglePower } = useTelemetry(selectedDeviceId, 30);
   const { socket } = useSocket();
+
+  const selectedDevice = devices.find((d) => d.deviceId === selectedDeviceId);
+  const isSelectedOnline = selectedDevice ? selectedDevice.status === 'online' : true;
 
   // Load initial alerts
   useEffect(() => {
@@ -93,12 +96,14 @@ export function DashboardPage() {
             dataPoints={dataPoints}
             currentReading={currentReading}
             deviceId={selectedDeviceId}
+            isOnline={isSelectedOnline}
             threshold={80}
           />
           <DeviceList
             devices={devices}
             activeDeviceId={selectedDeviceId}
             onSelectDevice={(id) => setSelectedDeviceId(id)}
+            onTogglePower={togglePower}
           />
         </div>
 
