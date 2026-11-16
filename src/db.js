@@ -5,7 +5,11 @@ let client;
 let db;
 
 export async function connectDatabase() {
-  client = new MongoClient(config.mongoUri, { maxPoolSize: 100, retryWrites: true });
+  client = new MongoClient(config.mongoUri, {
+    maxPoolSize: config.mongoMaxPoolSize,
+    retryWrites: true,
+    serverSelectionTimeoutMS: 5000,
+  });
   await client.connect();
   db = client.db(config.mongoDb);
 
@@ -16,8 +20,10 @@ export async function connectDatabase() {
       expireAfterSeconds: 60 * 60 * 24 * 90,
     });
   }
-  await db.collection('telemetry').createIndex({ 'meta.sensorId': 1, timestamp: -1 });
+  await db.collection('telemetry').createIndex({ 'meta.ownerId': 1, 'meta.sensorId': 1, timestamp: -1 });
   await db.collection('rules').createIndex({ updatedAt: -1 });
+  await db.collection('users').createIndex({ email: 1 }, { unique: true });
+  await db.collection('alerts').createIndex({ ownerId: 1, timestamp: -1 });
   return db;
 }
 

@@ -8,7 +8,7 @@ export function normalizeTelemetry(input) {
   if (Number.isNaN(timestamp.getTime())) throw new Error('timestamp must be a valid date');
   return {
     timestamp,
-    meta: { sensorId: input.sensorId, deviceId: input.deviceId ?? 'unknown', siteId: input.siteId ?? 'default' },
+    meta: { sensorId: input.sensorId, deviceId: input.deviceId ?? 'unknown', siteId: input.siteId ?? 'default', ownerId: input.ownerId },
     measurements: input.measurements,
   };
 }
@@ -18,15 +18,22 @@ export class TelemetryWriter {
   #timer;
   #writing = false;
 
-  constructor({ batchSize, flushMs }) {
+  constructor({ batchSize, flushMs, maxPending }) {
     this.batchSize = batchSize;
+    this.maxPending = maxPending;
     this.#timer = setInterval(() => void this.flush(), flushMs);
     this.#timer.unref();
   }
 
   enqueue(document) {
+    if (this.#queue.length >= this.maxPending) return false;
     this.#queue.push(document);
     if (this.#queue.length >= this.batchSize) void this.flush();
+    return true;
+  }
+
+  hasCapacity(count = 1) {
+    return this.#queue.length + count <= this.maxPending;
   }
 
   async flush() {
@@ -53,7 +60,7 @@ export class TelemetryWriter {
 }
 
 export function publishTelemetry(document) {
-  telemetryEvents.next({ ...document, sensorId: document.meta.sensorId, deviceId: document.meta.deviceId });
+  telemetryEvents.next({ ...document, sensorId: document.meta.sensorId, deviceId: document.meta.deviceId, ownerId: document.meta.ownerId });
 }
 
 export { filter, map, scan };

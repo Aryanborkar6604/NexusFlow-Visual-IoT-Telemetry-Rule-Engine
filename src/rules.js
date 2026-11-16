@@ -9,7 +9,7 @@ const graphSchema = z.object({
   edges: z.array(z.object({ source: z.string(), target: z.string() }).passthrough()),
 }).passthrough();
 
-export function compileGraph(rawGraph, onAlert) {
+export function compileGraph(rawGraph, onAlert, ownerId) {
   const graph = graphSchema.parse(rawGraph);
   const nodes = new Map(graph.nodes.map((node) => [node.id, node]));
   if (nodes.size !== graph.nodes.length) throw new Error('Graph contains duplicate node ids');
@@ -38,7 +38,7 @@ export function compileGraph(rawGraph, onAlert) {
 
   return new Observable((subscriber) => {
     const source = sources[0];
-    let stream = telemetryEvents.pipe(filter((event) => !source.data.sensorId || event.sensorId === source.data.sensorId));
+    let stream = telemetryEvents.pipe(filter((event) => event.ownerId === ownerId && (!source.data.sensorId || event.sensorId === source.data.sensorId)));
     for (const id of order.slice(order.indexOf(source.id) + 1)) {
       const node = nodes.get(id);
       const kind = node.type ?? node.data.kind;
@@ -75,13 +75,13 @@ export class RuleService {
     this.subscriptions = new Map();
   }
 
-  async save(input) {
+  async save(input, ownerId) {
     const graph = graphSchema.parse(input.graph);
     // Compile once before persisting so invalid graphs never become active rules.
-    compileGraph(graph, () => {});
+    compileGraph(graph, () => {}, ownerId);
     const id = input.id ?? randomUUID();
-    const rule = { _id: id, name: input.name ?? 'Untitled rule', enabled: input.enabled ?? true, graph, updatedAt: new Date() };
-    await getDb().collection('rules').replaceOne({ _id: id }, rule, { upsert: true });
+    const rule = { _id: id, ownerId, name: input.name ?? 'Untitled rule', enabled: input.enabled ?? true, graph, updatedAt: new Date() };
+    await getDb().collection('rules').replaceOne({ _id: id, ownerId }, rule, { upsert: true });
     this.activate(rule);
     return rule;
   }
@@ -91,7 +91,7 @@ export class RuleService {
     if (!rule.enabled) { this.subscriptions.delete(rule._id); return; }
     const subscription = compileGraph(rule.graph, ({ node, event }) => {
       void this.alertService.send({ ruleId: rule._id, ruleName: rule.name, node: node.data, event });
-    }).subscribe({ error: (error) => console.error(`Rule ${rule._id} stopped:`, error.message) });
+    }, rule.ownerId).subscribe({ error: (error) => console.error(`Rule ${rule._id} stopped:`, error.message) });
     this.subscriptions.set(rule._id, subscription);
   }
 
@@ -102,11 +102,13 @@ export class RuleService {
     }
   }
 
-  async list() { return getDb().collection('rules').find({}, { projection: { _id: 1, name: 1, enabled: 1, graph: 1, updatedAt: 1 } }).toArray(); }
+  async list(ownerId) { return getDb().collection('rules').find({ ownerId }, { projection: { _id: 1, name: 1, enabled: 1, graph: 1, updatedAt: 1 } }).toArray(); }
 
-  async remove(id) {
+  async remove(id, ownerId) {
+    const result = await getDb().collection('rules').deleteOne({ _id: id, ownerId });
+    if (!result.deletedCount) return false;
     this.subscriptions.get(id)?.unsubscribe();
     this.subscriptions.delete(id);
-    await getDb().collection('rules').deleteOne({ _id: id });
+    return true;
   }
 }
