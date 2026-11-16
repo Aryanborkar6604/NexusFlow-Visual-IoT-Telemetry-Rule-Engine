@@ -1,4 +1,12 @@
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Attempt to load from server/.env, root .env, or current working directory
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
 dotenv.config();
 
 export const ENV = {
@@ -10,5 +18,5 @@ export const ENV = {
   TWILIO_AUTH_TOKEN: process.env.TWILIO_AUTH_TOKEN || '',
   TWILIO_PHONE_NUMBER: process.env.TWILIO_PHONE_NUMBER || '',
   DEFAULT_FACTORY_ID: process.env.DEFAULT_FACTORY_ID || 'FACTORY_01',
-  CLIENT_ORIGIN: process.env.CLIENT_ORIGIN || 'http://localhost:5173'
+  CLIENT_ORIGIN: process.env.CLIENT_ORIGIN || 'http://localhost:5173',
 };
