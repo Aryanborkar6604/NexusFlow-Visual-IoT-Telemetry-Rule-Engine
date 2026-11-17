@@ -1,12 +1,15 @@
 import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { Activity, GitMerge, Bell, Flame, Wifi, WifiOff } from 'lucide-react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Activity, GitMerge, Bell, Flame, Wifi, WifiOff, LogOut, UserCircle } from 'lucide-react';
 import { useSocket } from '../../context/SocketContext.jsx';
+import { useAuth } from '../../context/AuthContext.jsx';
 import { alertService } from '../../services/alertService.js';
 
 export function Navbar() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { isConnected } = useSocket();
+  const { user, logout, isAuthenticated } = useAuth();
 
   const handleTriggerSpike = async () => {
     try {
@@ -14,6 +17,11 @@ export function Navbar() {
     } catch (err) {
       console.error('Spike trigger failed:', err);
     }
+  };
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
   };
 
   const navLinks = [
@@ -31,8 +39,12 @@ export function Navbar() {
             <Activity className="w-5 h-5 text-white" />
           </div>
           <div>
-            <span className="font-bold text-lg text-white tracking-tight">Nexus<span className="text-blue-400">Flow</span></span>
-            <span className="hidden sm:inline-block ml-2 text-xs font-mono text-slate-400 bg-slate-800 px-2 py-0.5 rounded border border-slate-700">IoT Automation</span>
+            <span className="font-bold text-lg text-white tracking-tight">
+              Nexus<span className="text-blue-400">Flow</span>
+            </span>
+            <span className="hidden sm:inline-block ml-2 text-xs font-mono text-slate-400 bg-slate-800 px-2 py-0.5 rounded border border-slate-700">
+              IoT Automation
+            </span>
           </div>
         </div>
 
@@ -59,12 +71,12 @@ export function Navbar() {
         </nav>
 
         {/* Right Actions & Status */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5 sm:gap-3">
           {/* Quick Demo Spike Trigger */}
           <button
             onClick={handleTriggerSpike}
             title="Inject simulated 89°C turbine spike to trigger alert"
-            className="flex items-center gap-1.5 text-xs bg-red-950/60 hover:bg-red-900/80 text-red-300 border border-red-800/60 px-2.5 py-1.5 rounded-md font-medium transition-all shadow-sm active:scale-95"
+            className="flex items-center gap-1.5 text-xs bg-red-950/60 hover:bg-red-900/80 text-red-300 border border-red-800/60 px-2.5 py-1.5 rounded-md font-medium transition-all shadow-sm active:scale-95 cursor-pointer"
           >
             <Flame className="w-3.5 h-3.5 text-red-400 animate-pulse" />
             <span className="hidden sm:inline">Simulate Spike</span>
@@ -90,6 +102,35 @@ export function Navbar() {
               </>
             )}
           </div>
+
+          {/* User Profile / Logout */}
+          {isAuthenticated && user ? (
+            <div className="flex items-center gap-2 pl-2 border-l border-slate-800">
+              <div className="hidden lg:block text-right">
+                <div className="text-xs font-bold text-white leading-tight truncate max-w-[120px]">
+                  {user.name || user.email?.split('@')[0]}
+                </div>
+                <div className="text-[10px] text-blue-400 font-mono capitalize">
+                  {user.role || 'manager'}
+                </div>
+              </div>
+
+              <button
+                onClick={handleLogout}
+                title="Sign out of NexusFlow"
+                className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-md transition-colors cursor-pointer"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
+          ) : (
+            <Link
+              to="/login"
+              className="text-xs font-semibold text-blue-400 hover:text-white bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-md border border-slate-700 transition-colors"
+            >
+              Sign In
+            </Link>
+          )}
         </div>
       </div>
     </header>

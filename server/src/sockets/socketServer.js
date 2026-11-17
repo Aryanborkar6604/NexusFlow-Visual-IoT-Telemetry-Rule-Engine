@@ -9,6 +9,11 @@ export class SocketServer {
         origin: '*',
         methods: ['GET', 'POST'],
       },
+      perMessageDeflate: {
+        threshold: 1024, // Only compress payloads over 1KB
+      },
+      pingTimeout: 20000,
+      pingInterval: 10000,
     });
 
     this.setupMiddleware();
@@ -19,7 +24,6 @@ export class SocketServer {
     this.io.use((socket, next) => {
       const token = socket.handshake.auth?.token;
       if (!token) {
-        // Fallback for easy dev/demo mode
         socket.user = {
           userId: 'demo_user',
           factoryId: ENV.DEFAULT_FACTORY_ID,
@@ -33,7 +37,6 @@ export class SocketServer {
         socket.user = decoded;
         next();
       } catch (err) {
-        // Still allow demo fallback
         socket.user = {
           userId: 'demo_user',
           factoryId: ENV.DEFAULT_FACTORY_ID,
@@ -50,13 +53,10 @@ export class SocketServer {
       const factoryRoom = `factory:${factoryId}`;
       socket.join(factoryRoom);
 
-      console.log(`[Socket.IO] Client connected: ${socket.id} (joined ${factoryRoom})`);
-
       socket.on('subscribe:workflow', ({ workflowId }) => {
         if (workflowId) {
           const room = `workflow:${workflowId}`;
           socket.join(room);
-          console.log(`[Socket.IO] Client ${socket.id} joined ${room}`);
         }
       });
 
@@ -64,22 +64,26 @@ export class SocketServer {
         if (workflowId) {
           const room = `workflow:${workflowId}`;
           socket.leave(room);
-          console.log(`[Socket.IO] Client ${socket.id} left ${room}`);
         }
-      });
-
-      socket.on('disconnect', () => {
-        console.log(`[Socket.IO] Client disconnected: ${socket.id}`);
       });
     });
   }
 
   emitToFactory(factoryId, event, data) {
-    this.io.to(`factory:${factoryId}`).emit(event, data);
+    if (event === 'telemetry:update') {
+      // Use volatile emission for high-frequency telemetry to avoid server buffering on slow clients
+      this.io.to(`factory:${factoryId}`).volatile.emit(event, data);
+    } else {
+      this.io.to(`factory:${factoryId}`).emit(event, data);
+    }
   }
 
   emitToWorkflow(workflowId, event, data) {
-    this.io.to(`workflow:${workflowId}`).emit(event, data);
+    if (event === 'workflow:nodeStatus') {
+      this.io.to(`workflow:${workflowId}`).volatile.emit(event, data);
+    } else {
+      this.io.to(`workflow:${workflowId}`).emit(event, data);
+    }
   }
 
   broadcast(event, data) {

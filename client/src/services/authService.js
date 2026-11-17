@@ -6,6 +6,11 @@ export const authService = {
     return res.data;
   },
 
+  async register({ name, email, password, role, factoryId }) {
+    const res = await apiClient.post('/auth/register', { name, email, password, role, factoryId });
+    return res.data;
+  },
+
   getCurrentUser() {
     const saved = localStorage.getItem('nexusflow_user');
     return saved ? JSON.parse(saved) : null;

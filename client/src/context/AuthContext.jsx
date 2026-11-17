@@ -7,26 +7,17 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => authService.getCurrentUser());
   const [token, setToken] = useState(() => authService.getToken());
 
-  // Demo auto-login if nothing stored so the app is instantly usable
-  useEffect(() => {
-    if (!token) {
-      const demoUser = {
-        id: 'demo_user_01',
-        name: 'Factory Manager',
-        email: 'manager@nexusflow.io',
-        role: 'manager',
-        factoryId: 'FACTORY_01',
-      };
-      const demoToken = 'demo_jwt_token_for_testing';
-      localStorage.setItem('nexusflow_token', demoToken);
-      localStorage.setItem('nexusflow_user', JSON.stringify(demoUser));
-      setUser(demoUser);
-      setToken(demoToken);
-    }
-  }, [token]);
-
   const login = async (email, password) => {
     const data = await authService.login(email, password);
+    localStorage.setItem('nexusflow_token', data.token);
+    localStorage.setItem('nexusflow_user', JSON.stringify(data.user));
+    setToken(data.token);
+    setUser(data.user);
+    return data;
+  };
+
+  const register = async (userData) => {
+    const data = await authService.register(userData);
     localStorage.setItem('nexusflow_token', data.token);
     localStorage.setItem('nexusflow_user', JSON.stringify(data.user));
     setToken(data.token);
@@ -41,7 +32,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, login, logout, isAuthenticated: !!token }}>
+    <AuthContext.Provider value={{ user, token, login, register, logout, isAuthenticated: !!token }}>
       {children}
     </AuthContext.Provider>
   );
