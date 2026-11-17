@@ -23,6 +23,8 @@ export async function connectDatabase() {
   await db.collection('telemetry').createIndex({ 'meta.ownerId': 1, 'meta.sensorId': 1, timestamp: -1 });
   await db.collection('rules').createIndex({ updatedAt: -1 });
   await db.collection('users').createIndex({ email: 1 }, { unique: true });
+  await db.collection('deviceKeys').createIndex({ keyHash: 1 }, { unique: true });
+  await db.collection('deviceKeys').createIndex({ ownerId: 1, createdAt: -1 });
   await db.collection('alerts').createIndex({ ownerId: 1, timestamp: -1 });
   return db;
 }

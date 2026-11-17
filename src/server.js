@@ -11,6 +11,7 @@ import { RuleService } from './rules.js';
 import { AlertService } from './alerts.js';
 import { forecastTelemetry } from './forecast.js';
 import { readToken, registerAuthRoutes, requireAuth } from './auth.js';
+import { registerDeviceKeyRoutes, requireIngestAuth } from './deviceKeys.js';
 
 const telemetrySchema = z.object({ sensorId: z.string().min(1).max(128), deviceId: z.string().max(128).optional(), siteId: z.string().max(128).optional(), timestamp: z.string().datetime({ offset: true }).optional(), measurements: z.record(z.number().finite()).refine((value) => Object.keys(value).length > 0, 'measurements cannot be empty') });
 
@@ -52,8 +53,8 @@ export async function createServer() {
   app.use(express.json({ limit: '2mb' }));
   app.get('/health', (_req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
   registerAuthRoutes(app);
-  app.use('/api', requireAuth);
-  app.post('/api/telemetry', (req, res) => {
+  registerDeviceKeyRoutes(app);
+  app.post('/api/telemetry', requireIngestAuth, (req, res) => {
     const rows = Array.isArray(req.body) ? req.body : [req.body];
     if (rows.length > config.maxBatch) return res.status(413).json({ error: `Maximum ${config.maxBatch} telemetry points per request` });
     const parsed = z.array(telemetrySchema).safeParse(rows);
@@ -63,6 +64,7 @@ export async function createServer() {
     for (const document of documents) { writer.enqueue(document); publishTelemetry(document); }
     return res.status(202).json({ accepted: documents.length });
   });
+  app.use('/api', requireAuth);
   app.get('/api/telemetry/latest', async (req, res, next) => {
     try {
       const sensorId = String(req.query.sensorId ?? '');
@@ -110,10 +112,7 @@ export async function createServer() {
     let user;
     try { user = readToken(new URL(socket.url, 'http://localhost').searchParams.get('token') ?? ''); }
     catch { socket.close(1008, 'Authentication required'); return; }
-    if (clients.size >= config.maxWebSocketClients) {
-      socket.close(1013, 'Server is at capacity');
-      return;
-    }
+    if (clients.size >= config.maxWebSocketClients) { socket.close(1013, 'Server is at capacity'); return; }
     socket.userId = user.id;
     clients.add(socket);
     socket.on('message', (raw) => {
