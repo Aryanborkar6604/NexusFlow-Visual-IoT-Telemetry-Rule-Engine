@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSocket } from '../context/SocketContext.jsx';
 import { telemetryService } from '../services/telemetryService.js';
 
@@ -7,22 +7,36 @@ export function useTelemetry(targetDeviceId = 'TURBINE_001', maxDataPoints = 30)
   const [dataPoints, setDataPoints] = useState([]);
   const [currentReading, setCurrentReading] = useState(null);
   const [devices, setDevices] = useState([]);
+  const [capacity, setCapacity] = useState({
+    activeCount: 0,
+    maxCapacity: 4,
+    availableSlots: 4,
+    loadPercent: 0,
+    status: 'idle',
+  });
+  const [capacityError, setCapacityError] = useState(null);
 
-  // Load initial devices & history
+  // Load initial devices, capacity & history
   useEffect(() => {
     let isMounted = true;
 
     async function loadData() {
       try {
-        const [devList, history] = await Promise.all([
-          telemetryService.getDevices(),
+        const [{ devices: devList, capacity: cap }, history] = await Promise.all([
+          telemetryService.getDevicesWithCapacity(),
           telemetryService.getHistory(targetDeviceId, maxDataPoints),
         ]);
         if (!isMounted) return;
         setDevices(devList);
+        if (cap) setCapacity(cap);
+
         if (history.length > 0) {
           setDataPoints(history);
           setCurrentReading(history[history.length - 1]);
+        } else {
+          const targetDev = devList.find((d) => d.deviceId === targetDeviceId);
+          setDataPoints([]);
+          setCurrentReading(targetDev?.lastReading || null);
         }
       } catch (err) {
         console.warn('[useTelemetry] Failed to load initial data:', err.message);
@@ -41,7 +55,6 @@ export function useTelemetry(targetDeviceId = 'TURBINE_001', maxDataPoints = 30)
     if (!socket) return;
 
     const handleUpdate = (reading) => {
-      // Update device list latest state
       setDevices((prev) =>
         prev.map((d) =>
           d.deviceId === reading.deviceId
@@ -78,6 +91,10 @@ export function useTelemetry(targetDeviceId = 'TURBINE_001', maxDataPoints = 30)
         )
       );
 
+      if (payload.capacity) {
+        setCapacity(payload.capacity);
+      }
+
       if (payload.deviceId === targetDeviceId && payload.lastReading) {
         setCurrentReading(payload.lastReading);
       }
@@ -92,33 +109,42 @@ export function useTelemetry(targetDeviceId = 'TURBINE_001', maxDataPoints = 30)
     };
   }, [socket, targetDeviceId, maxDataPoints]);
 
-  // Toggle machine power ON / OFF
+  // Toggle machine power ON / OFF (respecting 4-machine server capacity limit)
   const togglePower = useCallback(async (deviceId) => {
+    setCapacityError(null);
     try {
-      // Optimistic UI update
-      setDevices((prev) =>
-        prev.map((d) => {
-          if (d.deviceId === deviceId) {
-            const nextStatus = d.status === 'online' ? 'offline' : 'online';
-            return {
-              ...d,
-              status: nextStatus,
-              powered: nextStatus === 'online',
-            };
-          }
-          return d;
-        })
-      );
-      await telemetryService.toggleDevice(deviceId);
+      const res = await telemetryService.toggleDevice(deviceId);
+      if (res.device) {
+        setDevices((prev) =>
+          prev.map((d) => (d.deviceId === deviceId ? res.device : d))
+        );
+      }
+      if (res.capacity) {
+        setCapacity(res.capacity);
+      }
     } catch (err) {
-      console.error(`Failed to toggle device ${deviceId}:`, err);
+      const msg = err.response?.data?.error || err.message || 'Failed to toggle machine power.';
+      setCapacityError(msg);
+      if (err.response?.data?.capacity) {
+        setCapacity(err.response.data.capacity);
+      }
+      setTimeout(() => setCapacityError(null), 5000);
     }
   }, []);
+
+  const runningDevices = useMemo(
+    () => devices.filter((d) => d.status === 'online'),
+    [devices]
+  );
 
   return {
     dataPoints,
     currentReading,
     devices,
+    runningDevices,
+    capacity,
+    capacityError,
+    clearCapacityError: () => setCapacityError(null),
     isConnected,
     togglePower,
   };

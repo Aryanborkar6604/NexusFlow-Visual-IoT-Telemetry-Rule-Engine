@@ -9,7 +9,7 @@ import { pipelineManager } from './compiler/pipelineManager.js';
 import { alertEngine } from './alerts/alertEngine.js';
 import { setTelemetrySocketServer } from './controllers/telemetryController.js';
 import { setAlertSocketServer } from './controllers/alertController.js';
-import { setDeviceSocketServer } from './controllers/deviceController.js';
+import { setDeviceSocketServer, getServerCapacity } from './controllers/deviceController.js';
 import { simulator } from './simulator/telemetrySimulator.js';
 import { flushTelemetryBatch } from './ingestion/ingestionService.js';
 
@@ -46,11 +46,12 @@ app.use('/api/telemetry', telemetryRoutes);
 app.use('/api/workflows', workflowRoutes);
 app.use('/api/alerts', alertRoutes);
 
-// Health check with memory metrics
+// Health check with server capacity & memory metrics
 app.get('/api/health', (req, res) => {
   const memoryUsage = process.memoryUsage();
   res.json({
     status: 'ok',
+    capacity: getServerCapacity(),
     activeWorkflows: pipelineManager.getActiveWorkflowIds(),
     uptime: Math.round(process.uptime()),
     memory: {
@@ -82,11 +83,12 @@ async function startServer() {
     console.log(`🚀 NexusFlow Server running on port ${ENV.PORT}`);
     console.log(`📡 Ingestion endpoint: http://localhost:${ENV.PORT}/api/telemetry`);
     console.log(`⚡ Socket.IO real-time layer active (Volatile Telemetry Stream)`);
+    console.log(`🏭 Server Active Load Capacity: 3-4 Concurrent Running Machines (1Hz Live Stream)`);
     console.log(`💾 High-performance MongoDB micro-batch queue enabled`);
     console.log(`=================================================\n`);
 
-    // Start background telemetry simulator for out-of-the-box demo data
-    simulator.start(1500);
+    // Start background telemetry simulator (1000ms real-time tick for running machines)
+    simulator.start(1000);
   });
 }
 

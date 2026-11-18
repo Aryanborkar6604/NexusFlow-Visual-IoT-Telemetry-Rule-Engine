@@ -5,12 +5,22 @@ import { alertService } from '../services/alertService.js';
 import { DeviceList } from '../components/dashboard/DeviceList.jsx';
 import { LiveChart } from '../components/dashboard/LiveChart.jsx';
 import { AlertFeed } from '../components/dashboard/AlertFeed.jsx';
-import { Activity, ShieldCheck, Cpu, Flame } from 'lucide-react';
+import { RunningMachinesPanel } from '../components/dashboard/RunningMachinesPanel.jsx';
+import { Activity, ShieldCheck, Server, Flame } from 'lucide-react';
 
 export function DashboardPage() {
   const [selectedDeviceId, setSelectedDeviceId] = useState('TURBINE_001');
   const [alerts, setAlerts] = useState([]);
-  const { dataPoints, currentReading, devices, togglePower } = useTelemetry(selectedDeviceId, 30);
+  const {
+    dataPoints,
+    currentReading,
+    devices,
+    runningDevices,
+    capacity,
+    capacityError,
+    clearCapacityError,
+    togglePower,
+  } = useTelemetry(selectedDeviceId, 30);
   const { socket } = useSocket();
 
   const selectedDevice = devices.find((d) => d.deviceId === selectedDeviceId);
@@ -50,11 +60,14 @@ export function DashboardPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl flex items-center gap-3">
           <div className="p-2.5 rounded-lg bg-blue-500/10 text-blue-400">
-            <Cpu className="w-5 h-5" />
+            <Server className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-xs text-slate-400 font-medium">Monitored Equipment</p>
-            <p className="text-xl font-bold font-mono text-white">{devices.length || 4} Units</p>
+            <p className="text-xs text-slate-400 font-medium">Server Active Capacity</p>
+            <p className="text-xl font-bold font-mono text-white">
+              {capacity.activeCount} / {capacity.maxCapacity}{' '}
+              <span className="text-xs font-normal text-slate-400">Running</span>
+            </p>
           </div>
         </div>
 
@@ -63,8 +76,8 @@ export function DashboardPage() {
             <Activity className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-xs text-slate-400 font-medium">Pipeline Status</p>
-            <p className="text-xl font-bold text-emerald-400">Active (RxJS)</p>
+            <p className="text-xs text-slate-400 font-medium">Real-Time Stream Rate</p>
+            <p className="text-xl font-bold text-emerald-400">1 Hz (Live)</p>
           </div>
         </div>
 
@@ -89,7 +102,16 @@ export function DashboardPage() {
         </div>
       </div>
 
-      {/* Main Grid: Live Chart + Alert Stream */}
+      {/* Prominent Panel: Live Real-Time Readings of Currently Running Machines */}
+      <RunningMachinesPanel
+        runningDevices={runningDevices}
+        capacity={capacity}
+        activeDeviceId={selectedDeviceId}
+        onSelectDevice={(id) => setSelectedDeviceId(id)}
+        onTogglePower={togglePower}
+      />
+
+      {/* Main Grid: Live Chart + Alert Stream + Full Equipment Control */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
           <LiveChart
@@ -101,6 +123,9 @@ export function DashboardPage() {
           />
           <DeviceList
             devices={devices}
+            capacity={capacity}
+            capacityError={capacityError}
+            onClearError={clearCapacityError}
             activeDeviceId={selectedDeviceId}
             onSelectDevice={(id) => setSelectedDeviceId(id)}
             onTogglePower={togglePower}

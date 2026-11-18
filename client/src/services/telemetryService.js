@@ -6,6 +6,19 @@ export const telemetryService = {
     return res.data.devices || [];
   },
 
+  async getDevicesWithCapacity() {
+    const res = await apiClient.get('/devices');
+    return {
+      devices: res.data.devices || [],
+      capacity: res.data.capacity || { activeCount: 0, maxCapacity: 4, loadPercent: 0, status: 'idle' },
+    };
+  },
+
+  async getRunningDevices() {
+    const res = await apiClient.get('/devices/running');
+    return res.data;
+  },
+
   async getHistory(deviceId, limit = 60) {
     const res = await apiClient.get('/telemetry/history', {
       params: { deviceId, limit },

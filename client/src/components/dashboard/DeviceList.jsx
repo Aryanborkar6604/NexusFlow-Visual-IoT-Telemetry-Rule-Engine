@@ -1,8 +1,18 @@
 import React from 'react';
-import { Cpu, Power, Activity, Thermometer, Gauge, Droplets, CheckCircle2, XCircle } from 'lucide-react';
+import { Cpu, Power, Activity, Thermometer, Gauge, Droplets, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react';
 
-export function DeviceList({ devices = [], activeDeviceId, onSelectDevice, onTogglePower }) {
+export function DeviceList({
+  devices = [],
+  capacity = { activeCount: 0, maxCapacity: 4, loadPercent: 0 },
+  capacityError = null,
+  onClearError,
+  activeDeviceId,
+  onSelectDevice,
+  onTogglePower,
+}) {
   const onlineCount = devices.filter((d) => d.status === 'online').length;
+  const maxCapacity = capacity?.maxCapacity || 4;
+  const isAtCapacity = onlineCount >= maxCapacity;
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm">
@@ -10,19 +20,46 @@ export function DeviceList({ devices = [], activeDeviceId, onSelectDevice, onTog
         <div>
           <div className="flex items-center gap-2">
             <Cpu className="w-4 h-4 text-blue-400" />
-            <h3 className="text-sm font-bold text-white tracking-tight">Connected Machines &amp; Sensor Feeds</h3>
+            <h3 className="text-sm font-bold text-white tracking-tight">All Factory Machines &amp; Power Control</h3>
           </div>
           <p className="text-xs text-slate-400 mt-0.5">
-            Click machine to view live chart. Toggle the power switch to turn equipment ON or OFF.
+            Server handles up to {maxCapacity} concurrent running machines. Toggle ON/OFF to manage active load.
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-xs font-mono px-2.5 py-1 rounded-full border bg-slate-950 text-slate-300 border-slate-800 flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="font-bold text-emerald-400">{onlineCount}</span> / {devices.length} Running
+          <span
+            className={`text-xs font-mono px-2.5 py-1 rounded-full border flex items-center gap-1.5 ${
+              isAtCapacity
+                ? 'bg-amber-950/60 text-amber-300 border-amber-800/70'
+                : 'bg-slate-950 text-slate-300 border-slate-800'
+            }`}
+          >
+            <span
+              className={`w-2 h-2 rounded-full ${
+                isAtCapacity ? 'bg-amber-400' : 'bg-emerald-400 animate-pulse'
+              }`}
+            />
+            <span className={`font-bold ${isAtCapacity ? 'text-amber-300' : 'text-emerald-400'}`}>
+              {onlineCount} / {maxCapacity}
+            </span>{' '}
+            Server Capacity
           </span>
         </div>
       </div>
+
+      {capacityError && (
+        <div className="mb-4 px-3.5 py-2.5 rounded-lg bg-amber-950/60 border border-amber-700/70 text-xs text-amber-200 flex items-center justify-between gap-2">
+          <span className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+            {capacityError}
+          </span>
+          {onClearError && (
+            <button onClick={onClearError} className="text-amber-400 hover:text-white font-bold ml-2">
+              ✕
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {devices.map((device) => {

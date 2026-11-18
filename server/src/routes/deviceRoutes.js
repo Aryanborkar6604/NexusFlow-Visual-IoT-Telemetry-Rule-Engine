@@ -1,10 +1,11 @@
 import { Router } from 'express';
-import { getDevices, toggleDevice } from '../controllers/deviceController.js';
+import { getDevices, getRunningDevices, toggleDevice } from '../controllers/deviceController.js';
 import { authenticate } from '../middleware/authMiddleware.js';
 
 const router = Router();
 
 router.get('/', authenticate, getDevices);
+router.get('/running', authenticate, getRunningDevices);
 router.post('/:id/toggle', authenticate, toggleDevice);
 
 export default router;
