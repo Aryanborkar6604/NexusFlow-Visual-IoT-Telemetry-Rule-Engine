@@ -109,7 +109,7 @@ export function useTelemetry(targetDeviceId = 'TURBINE_001', maxDataPoints = 30)
     };
   }, [socket, targetDeviceId, maxDataPoints]);
 
-  // Toggle machine power ON / OFF (respecting 4-machine server capacity limit)
+  // Toggle machine power ON / OFF
   const togglePower = useCallback(async (deviceId) => {
     setCapacityError(null);
     try {
@@ -118,10 +118,15 @@ export function useTelemetry(targetDeviceId = 'TURBINE_001', maxDataPoints = 30)
         setDevices((prev) =>
           prev.map((d) => (d.deviceId === deviceId ? res.device : d))
         );
+        if (deviceId === targetDeviceId && res.device.lastReading) {
+          setCurrentReading(res.device.lastReading);
+          setDataPoints((prev) => [...prev, res.device.lastReading]);
+        }
       }
       if (res.capacity) {
         setCapacity(res.capacity);
       }
+      return res;
     } catch (err) {
       const msg = err.response?.data?.error || err.message || 'Failed to toggle machine power.';
       setCapacityError(msg);
@@ -129,11 +134,17 @@ export function useTelemetry(targetDeviceId = 'TURBINE_001', maxDataPoints = 30)
         setCapacity(err.response.data.capacity);
       }
       setTimeout(() => setCapacityError(null), 5000);
+      throw err;
     }
-  }, []);
+  }, [targetDeviceId]);
 
   const runningDevices = useMemo(
     () => devices.filter((d) => d.status === 'online'),
+    [devices]
+  );
+
+  const standbyDevices = useMemo(
+    () => devices.filter((d) => d.status !== 'online'),
     [devices]
   );
 
@@ -142,6 +153,7 @@ export function useTelemetry(targetDeviceId = 'TURBINE_001', maxDataPoints = 30)
     currentReading,
     devices,
     runningDevices,
+    standbyDevices,
     capacity,
     capacityError,
     clearCapacityError: () => setCapacityError(null),

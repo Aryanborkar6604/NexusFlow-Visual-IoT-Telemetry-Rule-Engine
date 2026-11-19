@@ -1,5 +1,17 @@
-// Server active capacity cap tuned for optimal 3-4 concurrent running machines
-export const MAX_ACTIVE_MACHINES = 4;
+// Server capacity tuned for optimal nominal load of 3-4 concurrent running machines (scalable up to all 7)
+export const NOMINAL_ACTIVE_MACHINES = 4;
+export const MAX_ACTIVE_MACHINES = 7;
+
+// Operational baseline sensor profiles for each machine when running
+const MACHINE_OPERATIONAL_PROFILES = {
+  TURBINE_001: { temperature: 72.4, pressure: 118, humidity: 42 },
+  PUMP_002: { temperature: 55.1, pressure: 95, humidity: 36 },
+  BOILER_003: { temperature: 92.8, pressure: 140, humidity: 64 },
+  CONVEYOR_004: { temperature: 38.5, pressure: 22, humidity: 53 },
+  ROBOT_005: { temperature: 52.3, pressure: 168, humidity: 39 },
+  COMPRESSOR_006: { temperature: 80.6, pressure: 130, humidity: 33 },
+  GENERATOR_007: { temperature: 67.2, pressure: 112, humidity: 47 },
+};
 
 // Registry of factory devices with attached sensors & power states
 // Default boot state: 3 machines RUNNING (optimal 75% load), remaining in standby
@@ -77,15 +89,18 @@ export function setDeviceSocketServer(server) {
 
 export function getServerCapacity() {
   const activeCount = devices.filter((d) => d.status === 'online').length;
-  const loadPercent = Math.round((activeCount / MAX_ACTIVE_MACHINES) * 100);
+  const loadPercent = Math.round((activeCount / NOMINAL_ACTIVE_MACHINES) * 100);
   let capacityStatus = 'optimal';
   if (activeCount === 0) capacityStatus = 'idle';
-  else if (activeCount >= MAX_ACTIVE_MACHINES) capacityStatus = 'at_capacity';
+  else if (activeCount === NOMINAL_ACTIVE_MACHINES) capacityStatus = 'full_load';
+  else if (activeCount > NOMINAL_ACTIVE_MACHINES) capacityStatus = 'high_load';
 
   return {
     activeCount,
-    maxCapacity: MAX_ACTIVE_MACHINES,
-    availableSlots: Math.max(0, MAX_ACTIVE_MACHINES - activeCount),
+    nominalCapacity: NOMINAL_ACTIVE_MACHINES,
+    maxCapacity: NOMINAL_ACTIVE_MACHINES,
+    totalMachines: devices.length,
+    availableSlots: Math.max(0, NOMINAL_ACTIVE_MACHINES - activeCount),
     loadPercent,
     status: capacityStatus,
   };
@@ -146,17 +161,6 @@ export function toggleDevice(req, res) {
 
   const isCurrentlyOnline = dev.status === 'online';
 
-  // Enforce server active load capacity (max 4 concurrent running machines)
-  if (!isCurrentlyOnline) {
-    const currentCapacity = getServerCapacity();
-    if (currentCapacity.activeCount >= MAX_ACTIVE_MACHINES) {
-      return res.status(429).json({
-        error: `Server capacity limit reached (${currentCapacity.activeCount}/${MAX_ACTIVE_MACHINES} machines running). Turn OFF an active machine first.`,
-        capacity: currentCapacity,
-      });
-    }
-  }
-
   dev.status = isCurrentlyOnline ? 'offline' : 'online';
   dev.powered = dev.status === 'online';
 
@@ -166,13 +170,22 @@ export function toggleDevice(req, res) {
       ...dev.lastReading,
       temperature: 24.0,
       pressure: 0,
+      humidity: dev.lastReading?.humidity || 50,
       status: 'offline',
       timestamp: new Date().toISOString(),
     };
   } else {
-    // Powered ON: initialize active operational reading immediately
+    // Powered ON: initialize realistic operational sensor readings immediately
+    const profile = MACHINE_OPERATIONAL_PROFILES[dev.deviceId] || {
+      temperature: 60.0,
+      pressure: 100,
+      humidity: 45,
+    };
     dev.lastReading = {
       ...dev.lastReading,
+      temperature: profile.temperature,
+      pressure: profile.pressure,
+      humidity: profile.humidity,
       status: 'online',
       timestamp: new Date().toISOString(),
     };
@@ -196,8 +209,9 @@ export function toggleDevice(req, res) {
     });
   }
 
+  const statusLabel = dev.powered ? 'RUNNING' : 'STOPPED';
   res.json({
-    message: `Machine ${dev.name} (${dev.deviceId}) is now ${dev.status.toUpperCase()}.`,
+    message: `Machine ${dev.name} (${dev.deviceId}) is now ${statusLabel}.`,
     device: dev,
     capacity,
   });

@@ -16,6 +16,7 @@ export function DashboardPage() {
     currentReading,
     devices,
     runningDevices,
+    standbyDevices,
     capacity,
     capacityError,
     clearCapacityError,
@@ -105,6 +106,7 @@ export function DashboardPage() {
       {/* Prominent Panel: Live Real-Time Readings of Currently Running Machines */}
       <RunningMachinesPanel
         runningDevices={runningDevices}
+        standbyDevices={standbyDevices}
         capacity={capacity}
         activeDeviceId={selectedDeviceId}
         onSelectDevice={(id) => setSelectedDeviceId(id)}

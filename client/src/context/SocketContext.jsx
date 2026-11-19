@@ -10,7 +10,13 @@ export function SocketProvider({ children }) {
   const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
-    const socketUrl = window.location.hostname === 'localhost' ? 'http://localhost:5000' : window.location.origin;
+    let socketUrl = window.location.origin;
+    if (typeof window !== 'undefined') {
+      const host = window.location.hostname;
+      if (host === 'localhost' || host === '127.0.0.1' || host === '[::1]') {
+        socketUrl = `http://${host}:5000`;
+      }
+    }
     const newSocket = io(socketUrl, {
       auth: { token },
       transports: ['websocket', 'polling'],

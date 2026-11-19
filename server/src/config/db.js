@@ -6,7 +6,7 @@ let isConnected = false;
 export async function connectDB() {
   try {
     const conn = await mongoose.connect(ENV.MONGODB_URI, {
-      serverSelectionTimeoutMS: 10000,
+      serverSelectionTimeoutMS: 2500,
     });
     isConnected = true;
     console.log(`[MongoDB Atlas] Successfully connected to host: ${conn.connection.host} (Database: ${conn.connection.name})`);

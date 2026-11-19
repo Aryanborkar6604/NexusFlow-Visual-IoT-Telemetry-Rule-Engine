@@ -3,6 +3,7 @@ import { Activity, Thermometer, Gauge, Droplets, Power, Server, Clock } from 'lu
 
 export function RunningMachinesPanel({
   runningDevices = [],
+  standbyDevices = [],
   capacity = { activeCount: 0, maxCapacity: 4, loadPercent: 0, status: 'idle' },
   activeDeviceId,
   onSelectDevice,
@@ -152,6 +153,31 @@ export function RunningMachinesPanel({
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Quick Start Standby Machines Bar */}
+      {standbyDevices && standbyDevices.length > 0 && (
+        <div className="mt-4 pt-3.5 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-slate-500" />
+            <span className="text-xs font-semibold text-slate-300">
+              Standby Machines ({standbyDevices.length} available to run):
+            </span>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            {standbyDevices.map((d) => (
+              <button
+                key={d.deviceId}
+                onClick={() => onTogglePower && onTogglePower(d.deviceId)}
+                title={`Click to turn ON ${d.name} (${d.deviceId})`}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-950/70 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-800/60 hover:border-emerald-500 transition-all cursor-pointer shadow-sm active:scale-95"
+              >
+                <Power className="w-3.5 h-3.5 text-emerald-400 group-hover:text-white" />
+                <span>+ Start {d.name}</span>
+              </button>
+            ))}
+          </div>
         </div>
       )}
     </div>

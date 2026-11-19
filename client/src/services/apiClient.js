@@ -1,8 +1,11 @@
 import axios from 'axios';
 
 const getApiBaseUrl = () => {
-  if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
-    return 'http://localhost:5000/api';
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    if (host === 'localhost' || host === '127.0.0.1' || host === '[::1]') {
+      return `http://${host}:5000/api`;
+    }
   }
   return '/api';
 };

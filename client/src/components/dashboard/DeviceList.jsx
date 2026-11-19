@@ -95,22 +95,39 @@ export function DeviceList({
                   </div>
                 </div>
 
-                {/* ON / OFF Power Switch Button */}
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation(); // Don't trigger card selection
-                    onTogglePower && onTogglePower(device.deviceId);
-                  }}
-                  title={isOnline ? 'Click to turn machine OFF' : 'Click to turn machine ON'}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm active:scale-95 ${
-                    isOnline
-                      ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-900/30 border border-emerald-500'
-                      : 'bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 border border-slate-700'
-                  }`}
-                >
-                  <Power className={`w-3.5 h-3.5 ${isOnline ? 'text-white' : 'text-slate-400'}`} />
-                  <span>{isOnline ? 'ON' : 'OFF'}</span>
-                </button>
+                {/* Status Badge & Power Switch Button */}
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full flex items-center gap-1 ${
+                      isOnline
+                        ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-800/80'
+                        : 'bg-slate-800/80 text-slate-400 border border-slate-700/60'
+                    }`}
+                  >
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full ${
+                        isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'
+                      }`}
+                    />
+                    {isOnline ? 'RUNNING' : 'STANDBY'}
+                  </span>
+
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation(); // Don't trigger card selection
+                      onTogglePower && onTogglePower(device.deviceId);
+                    }}
+                    title={isOnline ? 'Click to turn machine OFF' : 'Click to turn machine ON'}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer ${
+                      isOnline
+                        ? 'bg-slate-800 hover:bg-red-950/90 text-slate-300 hover:text-red-300 border border-slate-700 hover:border-red-800/80'
+                        : 'bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-400 shadow-md shadow-emerald-950/60'
+                    }`}
+                  >
+                    <Power className={`w-3.5 h-3.5 ${isOnline ? 'text-red-400' : 'text-white'}`} />
+                    <span>{isOnline ? 'STOP' : 'START'}</span>
+                  </button>
+                </div>
               </div>
 
               {/* Status Badge & Sensor Readings */}
@@ -150,11 +167,18 @@ export function DeviceList({
                 <div className="pt-2.5 border-t border-slate-800/60 flex items-center justify-between text-xs bg-slate-950/60 -mx-4 -mb-4 p-3 rounded-b-xl">
                   <span className="flex items-center gap-1.5 text-slate-400 text-[11px] font-mono">
                     <XCircle className="w-3.5 h-3.5 text-slate-500" />
-                    Machine Powered Down (Standby)
+                    Machine in Standby (Ambient: {reading.temperature !== undefined ? `${reading.temperature}°C` : '24°C'})
                   </span>
-                  <span className="text-[11px] font-mono text-slate-500">
-                    Ambient: {reading.temperature !== undefined ? `${reading.temperature}°C` : '24°C'}
-                  </span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onTogglePower && onTogglePower(device.deviceId);
+                    }}
+                    className="text-xs font-bold text-emerald-400 hover:text-emerald-300 underline cursor-pointer flex items-center gap-1"
+                  >
+                    <Power className="w-3 h-3" />
+                    Click to Start
+                  </button>
                 </div>
               )}
             </div>
