@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { config } from './config.js';
 import { connectDatabase, closeDatabase, getDb } from './db.js';
 import { TelemetryWriter, normalizeTelemetry, publishTelemetry, telemetryEvents } from './telemetry.js';
-import { RuleService } from './rules.js';
+import { RuleService, RuleValidationError } from './rules.js';
 import { AlertService } from './alerts.js';
 import { forecastTelemetry } from './forecast.js';
 import { readToken, registerAuthRoutes, requireAuth } from './auth.js';
@@ -100,7 +100,7 @@ export async function createServer() {
   app.get('/api/rules', async (req, res, next) => { try { res.json(await ruleService.list(req.user.id)); } catch (error) { next(error); } });
   app.post('/api/rules', async (req, res, next) => {
     try { res.status(201).json(await ruleService.save(req.body, req.user.id)); }
-    catch (error) { if (error.name === 'ZodError' || error.message.includes('Graph')) return res.status(400).json({ error: error.message, details: error.issues }); next(error); }
+    catch (error) { if (error.name === 'ZodError' || error instanceof RuleValidationError) return res.status(400).json({ error: error.message, details: error.issues }); next(error); }
   });
   app.delete('/api/rules/:id', async (req, res, next) => { try { const removed = await ruleService.remove(req.params.id, req.user.id); if (!removed) return res.status(404).json({ error: 'Rule not found' }); return res.status(204).end(); } catch (error) { next(error); } });
   app.get('/api/alerts', async (req, res, next) => {
