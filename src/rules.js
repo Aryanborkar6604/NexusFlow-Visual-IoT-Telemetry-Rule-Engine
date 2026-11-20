@@ -19,9 +19,11 @@ const graphSchema = z.object({
 const getKind = (node) => node.data.kind ?? node.type;
 const sourceKinds = new Set(['sensor', 'source']);
 const averageKinds = new Set(['movingAverage', 'moving_average', 'filter']);
+const mathKinds = new Set(['math', 'mathOperation']);
 const conditionKinds = new Set(['condition', 'threshold']);
 const alertKinds = new Set(['alert']);
 const conditionOperators = new Set(['gt', '>', 'gte', '>=', 'lt', '<', 'lte', '<=', 'eq', '==']);
+const mathOperators = new Set(['add', 'subtract', 'multiply', 'divide', 'modulo']);
 
 function validateGraph(rawGraph) {
   const graph = graphSchema.parse(rawGraph);
@@ -50,7 +52,7 @@ function validateGraph(rawGraph) {
 
   for (const node of graph.nodes) {
     const kind = getKind(node);
-    if (!sourceKinds.has(kind) && !averageKinds.has(kind) && !conditionKinds.has(kind) && !alertKinds.has(kind)) {
+    if (!sourceKinds.has(kind) && !averageKinds.has(kind) && !mathKinds.has(kind) && !conditionKinds.has(kind) && !alertKinds.has(kind)) {
       throw new Error('Unsupported rule node type: ' + String(kind));
     }
     if (node.id !== source.id && incoming.get(node.id).length !== 1) {
@@ -80,6 +82,20 @@ function validateGraph(rawGraph) {
       if (node.data.field !== undefined && (typeof node.data.field !== 'string' || node.data.field.length === 0)) {
         throw new Error('Condition field must be a non-empty string');
       }
+    }
+
+    if (mathKinds.has(kind)) {
+      const operation = node.data.operation;
+      const operand = Number(node.data.operand);
+      const field = node.data.field ?? 'value';
+      const outputField = node.data.outputField ?? 'result';
+      if (!mathOperators.has(operation)) throw new Error('Unsupported math operation: ' + String(operation));
+      if (!Number.isFinite(operand)) throw new Error('Math operand must be a finite number');
+      if ((operation === 'divide' || operation === 'modulo') && operand === 0) {
+        throw new Error('Math divisor cannot be zero');
+      }
+      if (typeof field !== 'string' || field.length === 0) throw new Error('Math field must be a non-empty string');
+      if (typeof outputField !== 'string' || outputField.length === 0) throw new Error('Math outputField must be a non-empty string');
     }
   }
 
@@ -120,6 +136,30 @@ function conditionMatches(event, node) {
     case '==': return actual === target;
     default: return false;
   }
+}
+
+function applyMathOperation(event, node) {
+  const field = node.data.field ?? 'value';
+  const outputField = node.data.outputField ?? 'result';
+  const value = Number(event[field] ?? event.measurements?.[field]);
+  const operand = Number(node.data.operand);
+  if (!Number.isFinite(value)) return null;
+
+  let result;
+  switch (node.data.operation) {
+    case 'add': result = value + operand; break;
+    case 'subtract': result = value - operand; break;
+    case 'multiply': result = value * operand; break;
+    case 'divide': result = value / operand; break;
+    case 'modulo': result = value % operand; break;
+    default: return null;
+  }
+  if (!Number.isFinite(result)) return null;
+  return {
+    ...event,
+    [outputField]: result,
+    measurements: { ...event.measurements, [outputField]: result },
+  };
 }
 
 export class RuleValidationError extends Error {
@@ -171,6 +211,12 @@ export function compileGraph(rawGraph, onAlert, ownerId) {
         );
       } else if (conditionKinds.has(kind)) {
         stream = parent.pipe(filter((event) => conditionMatches(event, node)), share());
+      } else if (mathKinds.has(kind)) {
+        stream = parent.pipe(
+          map((event) => applyMathOperation(event, node)),
+          filter((event) => event !== null),
+          share(),
+        );
       } else if (alertKinds.has(kind)) {
         stream = parent.pipe(tap((event) => onAlert({ node, event })), share());
       }

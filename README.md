@@ -30,7 +30,7 @@ Hardware may send telemetry with `X-API-Key: nxf_...` instead of a manager JWT. 
 
 ## Rule graph format
 
-Use React Flow's `nodes` and `edges`. Each node needs `id`, `type`, and `data`; edges need `source` and `target`. Supported node types are `sensor`, `movingAverage`, `condition`, and `alert`. Example:
+Use React Flow's `nodes` and `edges`. Each node needs `id`, `type`, and `data`; edges need `source` and `target`. Supported node types are `sensor`, `movingAverage`, `mathOperation`, `condition`, and `alert`. Example:
 
 ```json
 {
@@ -48,7 +48,9 @@ Use React Flow's `nodes` and `edges`. Each node needs `id`, `type`, and `data`; 
 }
 ```
 
-One sensor source and at least one alert are required. Graphs must be acyclic, every node must be reachable from the sensor, and each non-source node must have exactly one incoming edge. Nodes can branch into multiple downstream paths, but each path must end at an alert node; merged paths are rejected because their data semantics are ambiguous. Every branch receives the stream produced by its parent node, and condition nodes pass only readings that match their condition. Unsupported node types and invalid settings are rejected before a rule is saved. Moving average supports an integer `window` (1–10000) and `field`; conditions support `gt`, `gte`, `lt`, `lte`, and `eq`. An alert node with `webhookUrl` sends a JSON POST; one with `phone` emits a mock SMS delivery log. Real SMS needs a provider integration.
+One sensor source and at least one alert are required. Graphs must be acyclic, every node must be reachable from the sensor, and each non-source node must have exactly one incoming edge. Nodes can branch into multiple downstream paths, but each path must end at an alert node; merged paths are rejected because their data semantics are ambiguous. Every branch receives the stream produced by its parent node, and condition nodes pass only readings that match their condition. Unsupported node types and invalid settings are rejected before a rule is saved. Moving average supports an integer `window` (1–10000) and `field`. A `mathOperation` node accepts an input `field`, an `operation` (`add`, `subtract`, `multiply`, `divide`, or `modulo`), a numeric `operand`, and an optional `outputField` (defaults to `result`). Conditions support `gt`, `gte`, `lt`, `lte`, and `eq`. An alert node with `webhookUrl` sends a JSON POST; one with `phone` emits a mock SMS delivery log. Real SMS needs a provider integration.
+
+For example, a math node with `{"field":"temperature","operation":"multiply","operand":1.8,"outputField":"scaledTemperature"}` writes the calculated value to `event.scaledTemperature` and `event.measurements.scaledTemperature`. A following condition can use `field: "scaledTemperature"`.
 
 ## WebSocket protocol
 
