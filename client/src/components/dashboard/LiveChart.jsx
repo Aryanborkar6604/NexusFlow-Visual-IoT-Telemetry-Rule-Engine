@@ -11,7 +11,15 @@ import {
 } from 'recharts';
 import { Activity, Thermometer, Gauge, Droplets, Power } from 'lucide-react';
 
-export function LiveChart({ dataPoints = [], currentReading, deviceId = 'TURBINE_001', isOnline = true, threshold = 80 }) {
+export function LiveChart({
+  dataPoints = [],
+  currentReading,
+  deviceId = 'TURBINE_001',
+  runningDevices = [],
+  onSelectDevice,
+  isOnline = true,
+  threshold = 80,
+}) {
   const [selectedMetric, setSelectedMetric] = useState('temperature');
 
   const chartData = dataPoints.map((dp, idx) => {
@@ -39,7 +47,7 @@ export function LiveChart({ dataPoints = [], currentReading, deviceId = 'TURBINE
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm">
       {/* Chart Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-4 pb-3 border-b border-slate-800">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-3 pb-3 border-b border-slate-800">
         <div>
           <div className="flex items-center gap-2">
             <Activity className="w-4 h-4 text-blue-400" />
@@ -90,6 +98,40 @@ export function LiveChart({ dataPoints = [], currentReading, deviceId = 'TURBINE
           </div>
         </div>
       </div>
+
+      {/* Running Machines Live Stream Switcher */}
+      {runningDevices && runningDevices.length > 0 && (
+        <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-800/80 flex-wrap">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            Active Machines:
+          </span>
+          {runningDevices.map((d) => {
+            const isSelected = d.deviceId === deviceId;
+            const temp = d.lastReading?.temperature;
+            return (
+              <button
+                key={d.deviceId}
+                onClick={() => onSelectDevice && onSelectDevice(d.deviceId)}
+                title={`Click to view live stream for ${d.name} (${d.deviceId})`}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer ${
+                  isSelected
+                    ? 'bg-blue-600 text-white shadow-md shadow-blue-950/50 ring-1 ring-blue-400'
+                    : 'bg-slate-950/80 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800'
+                }`}
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-white' : 'bg-emerald-400'}`} />
+                <span>{d.deviceId}</span>
+                {temp !== undefined && (
+                  <span className={`text-[11px] ${temp > threshold ? 'text-red-300 font-extrabold' : isSelected ? 'text-blue-100' : 'text-slate-400'}`}>
+                    {temp}°C
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {!isOnline && (
         <div className="mb-4 px-3.5 py-2.5 rounded-lg bg-amber-950/40 border border-amber-800/60 text-xs text-amber-300 flex items-center justify-between">

@@ -1,6 +1,7 @@
 import { Subject } from 'rxjs';
 import { Telemetry } from '../models/Telemetry.js';
 import { isDbConnected } from '../config/db.js';
+import { alertEngine } from '../alerts/alertEngine.js';
 
 // In-memory RxJS streams keyed by deviceId
 const deviceStreams = new Map();
@@ -80,7 +81,21 @@ export function ingestReading(reading, socketServer = null) {
     socketServer.emitToFactory(factoryId, 'telemetry:update', payload);
   }
 
-  // 3. Batch persistence (Micro-batched bulk write)
+  // 3. Automated safety sentinel: Trigger alert when running machine exceeds 80°C threshold
+  if (payload.temperature !== undefined && payload.temperature > 80) {
+    alertEngine.triggerAlert({
+      workflowId: 'wf_sentinel_safety',
+      workflowName: 'High Temperature Safety Sentinel',
+      nodeId: 'cond_temp_overheat',
+      deviceId: payload.deviceId,
+      factoryId: payload.factoryId,
+      recipient: '+15550199',
+      message: `${payload.deviceId} Temperature Exceeded Safety Threshold: {{value}}°C (Limit: 80°C)`,
+      value: payload.temperature,
+    });
+  }
+
+  // 4. Batch persistence (Micro-batched bulk write)
   if (isDbConnected()) {
     telemetryBatchQueue.push({
       timestamp: payload.timestamp,

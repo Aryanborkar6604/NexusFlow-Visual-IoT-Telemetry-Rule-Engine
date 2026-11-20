@@ -27,6 +27,14 @@ export function DashboardPage() {
   const selectedDevice = devices.find((d) => d.deviceId === selectedDeviceId);
   const isSelectedOnline = selectedDevice ? selectedDevice.status === 'online' : true;
 
+  const handleTogglePower = async (deviceId) => {
+    const isCurrentlyOnline = devices.find((d) => d.deviceId === deviceId)?.status === 'online';
+    await togglePower(deviceId);
+    if (!isCurrentlyOnline) {
+      setSelectedDeviceId(deviceId);
+    }
+  };
+
   // Load initial alerts
   useEffect(() => {
     async function loadAlerts() {
@@ -110,7 +118,7 @@ export function DashboardPage() {
         capacity={capacity}
         activeDeviceId={selectedDeviceId}
         onSelectDevice={(id) => setSelectedDeviceId(id)}
-        onTogglePower={togglePower}
+        onTogglePower={handleTogglePower}
       />
 
       {/* Main Grid: Live Chart + Alert Stream + Full Equipment Control */}
@@ -120,6 +128,8 @@ export function DashboardPage() {
             dataPoints={dataPoints}
             currentReading={currentReading}
             deviceId={selectedDeviceId}
+            runningDevices={runningDevices}
+            onSelectDevice={(id) => setSelectedDeviceId(id)}
             isOnline={isSelectedOnline}
             threshold={80}
           />
@@ -130,12 +140,17 @@ export function DashboardPage() {
             onClearError={clearCapacityError}
             activeDeviceId={selectedDeviceId}
             onSelectDevice={(id) => setSelectedDeviceId(id)}
-            onTogglePower={togglePower}
+            onTogglePower={handleTogglePower}
           />
         </div>
 
         <div className="lg:col-span-1">
-          <AlertFeed alerts={alerts} />
+          <AlertFeed
+            alerts={alerts}
+            runningDevices={runningDevices}
+            activeDeviceId={selectedDeviceId}
+            onSelectDevice={(id) => setSelectedDeviceId(id)}
+          />
         </div>
       </div>
     </div>

@@ -3,9 +3,23 @@ import { isDbConnected } from '../config/db.js';
 import { sendMockSms } from './providers/mockSmsProvider.js';
 
 // In-memory fallback history and trigger debouncing
-const inMemoryAlerts = [];
+const inMemoryAlerts = [
+  {
+    id: `alt_init_01`,
+    workflowId: 'wf_sentinel_safety',
+    workflowName: 'High Temperature Safety Sentinel',
+    triggeredNodeId: 'cond_temp_overheat',
+    deviceId: 'BOILER_003',
+    factoryId: 'FACTORY_01',
+    recipient: '+15550199',
+    message: 'BOILER_003 Temperature Exceeded Safety Threshold: 92.8°C (Limit: 80°C)',
+    value: 92.8,
+    status: 'fired',
+    createdAt: new Date(Date.now() - 30000).toISOString(),
+  },
+];
 const triggerCooldowns = new Map();
-const COOLDOWN_MS = 5000; // 5 second cooldown per workflow to prevent flood
+const COOLDOWN_MS = 12000; // 12 second cooldown per device & node to avoid flood while streaming live
 
 export class AlertEngine {
   constructor(socketServer = null) {
@@ -17,7 +31,7 @@ export class AlertEngine {
   }
 
   async triggerAlert({ workflowId, workflowName = 'Workflow', nodeId, deviceId = 'DEVICE_001', factoryId = 'FACTORY_01', recipient, message, value }) {
-    const cooldownKey = `${workflowId}:${nodeId}`;
+    const cooldownKey = `${workflowId}:${nodeId}:${deviceId}`;
     const now = Date.now();
     const lastTrigger = triggerCooldowns.get(cooldownKey) || 0;
 

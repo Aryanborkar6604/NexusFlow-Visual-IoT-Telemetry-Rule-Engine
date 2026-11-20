@@ -14,18 +14,22 @@ export async function getAlerts(req, res) {
   const factoryId = req.user?.factoryId || 'FACTORY_01';
   const { limit = 50 } = req.query;
 
+  const inMemory = alertEngine.getRecentAlerts(Number(limit));
+
   if (!isDbConnected()) {
-    const list = alertEngine.getRecentAlerts(Number(limit));
-    return res.json({ alerts: list });
+    return res.json({ alerts: inMemory });
   }
 
   try {
     const list = await Alert.find({ factoryId })
       .sort({ createdAt: -1 })
       .limit(Number(limit));
-    res.json({ alerts: list });
+    if (!list || list.length === 0) {
+      return res.json({ alerts: inMemory });
+    }
+    return res.json({ alerts: list });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    return res.json({ alerts: inMemory });
   }
 }
 
