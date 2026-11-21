@@ -24,6 +24,14 @@ const conditionKinds = new Set(['condition', 'threshold']);
 const alertKinds = new Set(['alert']);
 const conditionOperators = new Set(['gt', '>', 'gte', '>=', 'lt', '<', 'lte', '<=', 'eq', '==']);
 const mathOperators = new Set(['add', 'subtract', 'multiply', 'divide', 'modulo']);
+const trueHandles = new Set(['true', 'yes', 'pass']);
+const falseHandles = new Set(['false', 'no', 'fail']);
+
+function conditionBranch(handle) {
+  if (trueHandles.has(handle)) return true;
+  if (falseHandles.has(handle)) return false;
+  throw new Error('Condition edge sourceHandle must be true/yes/pass or false/no/fail');
+}
 
 function validateGraph(rawGraph) {
   const graph = graphSchema.parse(rawGraph);
@@ -38,8 +46,8 @@ function validateGraph(rawGraph) {
     const key = edge.source + '\u0000' + edge.target;
     if (edgeKeys.has(key)) throw new Error('Graph contains a duplicate edge');
     edgeKeys.add(key);
-    outgoing.get(edge.source).push(edge.target);
-    incoming.get(edge.target).push(edge.source);
+    outgoing.get(edge.source).push(edge);
+    incoming.get(edge.target).push(edge);
   }
 
   const sources = graph.nodes.filter((node) => sourceKinds.has(getKind(node)));
@@ -63,6 +71,22 @@ function validateGraph(rawGraph) {
     }
     if (outgoing.get(node.id).length === 0 && !alertKinds.has(kind)) {
       throw new Error('Every branch must end at an alert node');
+    }
+
+    if (conditionKinds.has(kind)) {
+      const edges = outgoing.get(node.id);
+      const hasHandles = edges.some((edge) => edge.sourceHandle !== undefined && edge.sourceHandle !== null);
+      if (hasHandles) {
+        const branches = new Set();
+        for (const edge of edges) {
+          if (typeof edge.sourceHandle !== 'string' || edge.sourceHandle.length === 0) {
+            throw new Error('Every outgoing condition edge must specify a branch sourceHandle');
+          }
+          const branch = conditionBranch(edge.sourceHandle);
+          if (branches.has(branch)) throw new Error('A condition can have at most one outgoing edge per branch');
+          branches.add(branch);
+        }
+      }
     }
 
     if (averageKinds.has(kind)) {
@@ -105,9 +129,9 @@ function validateGraph(rawGraph) {
   while (queue.length) {
     const id = queue.shift();
     order.push(id);
-    for (const target of outgoing.get(id)) {
-      remainingIncoming.set(target, remainingIncoming.get(target) - 1);
-      if (remainingIncoming.get(target) === 0) queue.push(target);
+    for (const edge of outgoing.get(id)) {
+      remainingIncoming.set(edge.target, remainingIncoming.get(edge.target) - 1);
+      if (remainingIncoming.get(edge.target) === 0) queue.push(edge.target);
     }
   }
   if (order.length !== graph.nodes.length) {
@@ -184,8 +208,11 @@ export function compileGraph(rawGraph, onAlert, ownerId) {
     for (const id of graph.order) {
       if (id === source.id) continue;
       const node = graph.nodes.get(id);
-      const parentId = graph.incoming.get(id)[0];
-      const parent = streams.get(parentId);
+      const incomingEdge = graph.incoming.get(id)[0];
+      const parentOutput = streams.get(incomingEdge.source);
+      const parent = parentOutput instanceof Map
+        ? parentOutput.get(conditionBranch(incomingEdge.sourceHandle) ? 'true' : 'false')
+        : parentOutput;
       const kind = getKind(node);
       let stream;
 
@@ -210,7 +237,15 @@ export function compileGraph(rawGraph, onAlert, ownerId) {
           share(),
         );
       } else if (conditionKinds.has(kind)) {
-        stream = parent.pipe(filter((event) => conditionMatches(event, node)), share());
+        const edges = graph.outgoing.get(id);
+        const hasHandles = edges.some((edge) => edge.sourceHandle !== undefined && edge.sourceHandle !== null);
+        const matches = parent.pipe(filter((event) => conditionMatches(event, node)), share());
+        if (hasHandles) {
+          const doesNotMatch = parent.pipe(filter((event) => !conditionMatches(event, node)), share());
+          stream = new Map([['true', matches], ['false', doesNotMatch]]);
+        } else {
+          stream = matches;
+        }
       } else if (mathKinds.has(kind)) {
         stream = parent.pipe(
           map((event) => applyMathOperation(event, node)),
