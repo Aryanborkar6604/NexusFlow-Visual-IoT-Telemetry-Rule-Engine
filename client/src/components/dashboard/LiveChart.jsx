@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   ResponsiveContainer,
   LineChart,
@@ -8,13 +8,15 @@ import {
   Tooltip,
   CartesianGrid,
   ReferenceLine,
+  Legend,
 } from 'recharts';
-import { Activity, Thermometer, Gauge, Droplets, Power } from 'lucide-react';
+import { Activity, Thermometer, Gauge, Droplets, Power, Layers, TrendingUp, Maximize2 } from 'lucide-react';
 
 export function LiveChart({
   dataPoints = [],
   currentReading,
   deviceId = 'TURBINE_001',
+  devices = [],
   runningDevices = [],
   onSelectDevice,
   isOnline = true,
@@ -22,42 +24,63 @@ export function LiveChart({
 }) {
   const [selectedMetric, setSelectedMetric] = useState('temperature');
 
-  const chartData = dataPoints.map((dp, idx) => {
-    const time = new Date(dp.timestamp);
-    return {
-      index: idx,
-      timeStr: time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-      temperature: dp.temperature,
-      pressure: dp.pressure,
-      humidity: dp.humidity,
-    };
-  });
+  const chartData = useMemo(() => {
+    return dataPoints.map((dp, idx) => {
+      const time = new Date(dp.timestamp);
+      return {
+        index: idx,
+        timeStr: time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+        temperature: dp.temperature,
+        pressure: dp.pressure,
+        humidity: dp.humidity,
+      };
+    });
+  }, [dataPoints]);
 
   const latestVal = currentReading?.[selectedMetric];
-  const isAboveThreshold = selectedMetric === 'temperature' && latestVal !== undefined && latestVal > threshold;
+  const isAboveThreshold =
+    (selectedMetric === 'temperature' || selectedMetric === 'all') &&
+    currentReading?.temperature !== undefined &&
+    currentReading.temperature > threshold;
 
   const metricConfig = {
     temperature: { label: 'Temperature', unit: '°C', color: '#3b82f6', icon: Thermometer },
     pressure: { label: 'Pressure', unit: 'PSI', color: '#f59e0b', icon: Gauge },
     humidity: { label: 'Humidity', unit: '%', color: '#10b981', icon: Droplets },
+    all: { label: 'Tri-Sensor Overview', unit: 'All', color: '#818cf8', icon: Layers },
   };
 
   const currentCfg = metricConfig[selectedMetric];
 
+  // Window statistics
+  const stats = useMemo(() => {
+    if (chartData.length === 0) return { min: 0, max: 0, avg: 0 };
+    const metricKey = selectedMetric === 'all' ? 'temperature' : selectedMetric;
+    const vals = chartData
+      .map((d) => d[metricKey])
+      .filter((v) => v !== undefined && !isNaN(v));
+    if (vals.length === 0) return { min: 0, max: 0, avg: 0 };
+    const min = Math.min(...vals);
+    const max = Math.max(...vals);
+    const sum = vals.reduce((a, b) => a + b, 0);
+    const avg = Math.round((sum / vals.length) * 10) / 10;
+    return { min, max, avg };
+  }, [chartData, selectedMetric]);
+
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm">
+    <div className="bg-gradient-to-b from-slate-900 to-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl">
       {/* Chart Header */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-3 pb-3 border-b border-slate-800">
         <div>
           <div className="flex items-center gap-2">
             <Activity className="w-4 h-4 text-blue-400" />
-            <h3 className="text-sm font-bold text-white tracking-tight">Real-Time Telemetry Stream</h3>
+            <h3 className="text-base font-bold text-white tracking-tight">Real-Time Telemetry Stream</h3>
           </div>
-          <p className="text-xs text-slate-400 mt-0.5">Monitoring {deviceId} across rolling 30-sample window</p>
+          <p className="text-xs text-slate-400 mt-0.5">Monitoring {deviceId} across rolling window ({chartData.length} samples)</p>
         </div>
 
         {/* Metric Selector Tabs */}
-        <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800">
+        <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
           {Object.entries(metricConfig).map(([key, cfg]) => {
             const Icon = cfg.icon;
             const isSelected = selectedMetric === key;
@@ -65,9 +88,9 @@ export function LiveChart({
               <button
                 key={key}
                 onClick={() => setSelectedMetric(key)}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                   isSelected
-                    ? 'bg-slate-800 text-white shadow-sm'
+                    ? 'bg-slate-800 text-white shadow-sm ring-1 ring-slate-700'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
@@ -80,18 +103,22 @@ export function LiveChart({
 
         {/* Live Metrics Callout */}
         <div className="text-right">
-          <span className="text-[10px] uppercase font-mono text-slate-400 block">Current {currentCfg.label}</span>
+          <span className="text-[10px] uppercase font-mono text-slate-400 block">
+            {selectedMetric === 'all' ? 'Live Temp / Pressure' : `Current ${currentCfg.label}`}
+          </span>
           <div className="flex items-baseline gap-1.5 justify-end">
             <span
               className={`text-2xl font-black font-mono tracking-tight ${
                 isAboveThreshold ? 'text-red-400 animate-pulse' : 'text-white'
               }`}
-              style={{ color: !isAboveThreshold ? currentCfg.color : undefined }}
+              style={{ color: !isAboveThreshold && selectedMetric !== 'all' ? currentCfg.color : undefined }}
             >
-              {latestVal !== undefined ? `${latestVal} ${currentCfg.unit}` : '--'}
+              {selectedMetric === 'all'
+                ? `${currentReading?.temperature ?? '--'}°C / ${currentReading?.pressure ?? '--'} PSI`
+                : latestVal !== undefined ? `${latestVal} ${currentCfg.unit}` : '--'}
             </span>
             {isAboveThreshold && (
-              <span className="text-[10px] bg-red-950 text-red-300 border border-red-800 px-1.5 py-0.5 rounded font-mono font-bold">
+              <span className="text-[10px] bg-red-950 text-red-300 border border-red-800 px-2 py-0.5 rounded-full font-mono font-bold animate-pulse">
                 THRESHOLD EXCEEDED
               </span>
             )}
@@ -104,7 +131,7 @@ export function LiveChart({
         <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-800/80 flex-wrap">
           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            Active Machines:
+            Switch Active Stream:
           </span>
           {runningDevices.map((d) => {
             const isSelected = d.deviceId === deviceId;
@@ -134,20 +161,21 @@ export function LiveChart({
       )}
 
       {!isOnline && (
-        <div className="mb-4 px-3.5 py-2.5 rounded-lg bg-amber-950/40 border border-amber-800/60 text-xs text-amber-300 flex items-center justify-between">
+        <div className="mb-4 px-4 py-2.5 rounded-xl bg-amber-950/40 border border-amber-800/60 text-xs text-amber-300 flex items-center justify-between">
           <span className="flex items-center gap-2 font-medium">
             <Power className="w-4 h-4 text-amber-400" />
             {deviceId} is currently Powered OFF (Standby)
           </span>
-          <span className="text-[11px] text-amber-400/80 font-mono">Toggle switch to ON to resume telemetry</span>
+          <span className="text-[11px] text-amber-400/80 font-mono">Click START in equipment panel to resume telemetry</span>
         </div>
       )}
 
       {/* Chart Canvas */}
       <div className="h-72 w-full">
         {chartData.length === 0 ? (
-          <div className="h-full flex items-center justify-center text-slate-500 text-xs">
-            Connecting to sensor feed and streaming live readings for {deviceId}...
+          <div className="h-full flex flex-col items-center justify-center text-slate-500 text-xs space-y-2">
+            <Activity className="w-6 h-6 animate-pulse text-blue-500" />
+            <p>Connecting to 1Hz sensor feed and streaming live readings for {deviceId}...</p>
           </div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
@@ -160,7 +188,7 @@ export function LiveChart({
                 interval="preserveStartEnd"
               />
               <YAxis
-                domain={['dataMin - 5', 'dataMax + 5']}
+                domain={['auto', 'auto']}
                 stroke="#64748b"
                 tick={{ fontSize: 10 }}
               />
@@ -168,37 +196,91 @@ export function LiveChart({
                 contentStyle={{
                   backgroundColor: '#0f172a',
                   borderColor: '#334155',
-                  borderRadius: '0.5rem',
+                  borderRadius: '0.75rem',
                   fontSize: '12px',
                   color: '#fff',
+                  boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)',
                 }}
               />
-              {/* Alert Threshold Line (shown when temperature is selected) */}
-              {selectedMetric === 'temperature' && (
+              {selectedMetric === 'all' && <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '6px' }} />}
+              
+              {/* Alert Threshold Line */}
+              {(selectedMetric === 'temperature' || selectedMetric === 'all') && (
                 <ReferenceLine
                   y={threshold}
                   stroke="#ef4444"
                   strokeDasharray="4 4"
                   label={{
-                    value: `Alert Threshold: ${threshold}°C`,
+                    value: `Threshold: ${threshold}°C`,
                     fill: '#ef4444',
                     fontSize: 10,
                     position: 'insideTopRight',
                   }}
                 />
               )}
-              <Line
-                type="monotone"
-                dataKey={selectedMetric}
-                stroke={currentCfg.color}
-                strokeWidth={2.5}
-                dot={{ r: 2, fill: currentCfg.color }}
-                activeDot={{ r: 5, fill: currentCfg.color }}
-                isAnimationActive={false}
-              />
+
+              {selectedMetric === 'all' ? (
+                <>
+                  <Line
+                    type="monotone"
+                    name="Temperature (°C)"
+                    dataKey="temperature"
+                    stroke="#3b82f6"
+                    strokeWidth={2}
+                    dot={{ r: 1.5, fill: '#3b82f6' }}
+                    isAnimationActive={false}
+                  />
+                  <Line
+                    type="monotone"
+                    name="Pressure (PSI)"
+                    dataKey="pressure"
+                    stroke="#f59e0b"
+                    strokeWidth={2}
+                    dot={{ r: 1.5, fill: '#f59e0b' }}
+                    isAnimationActive={false}
+                  />
+                  <Line
+                    type="monotone"
+                    name="Humidity (%)"
+                    dataKey="humidity"
+                    stroke="#10b981"
+                    strokeWidth={2}
+                    dot={{ r: 1.5, fill: '#10b981' }}
+                    isAnimationActive={false}
+                  />
+                </>
+              ) : (
+                <Line
+                  type="monotone"
+                  name={currentCfg.label}
+                  dataKey={selectedMetric}
+                  stroke={currentCfg.color}
+                  strokeWidth={2.5}
+                  dot={{ r: 2, fill: currentCfg.color }}
+                  activeDot={{ r: 5, fill: currentCfg.color }}
+                  isAnimationActive={false}
+                />
+              )}
             </LineChart>
           </ResponsiveContainer>
         )}
+      </div>
+
+      {/* Statistical Analytics Drawer */}
+      <div className="mt-3 pt-3 border-t border-slate-800/80 flex flex-wrap items-center justify-between text-xs text-slate-400 font-mono gap-2">
+        <div className="flex items-center gap-4">
+          <span>Min: <strong className="text-white">{stats.min}</strong> {selectedMetric === 'all' ? '°C' : currentCfg.unit}</span>
+          <span>Avg: <strong className="text-white">{stats.avg}</strong> {selectedMetric === 'all' ? '°C' : currentCfg.unit}</span>
+          <span>Max: <strong className={stats.max > threshold ? 'text-red-400' : 'text-white'}>{stats.max}</strong> {selectedMetric === 'all' ? '°C' : currentCfg.unit}</span>
+        </div>
+        <div className="flex items-center gap-3 text-[11px] text-slate-500">
+          <span>Buffer: {chartData.length} frames</span>
+          <span>•</span>
+          <span className="flex items-center gap-1 text-emerald-400">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+            RxJS Stream Live
+          </span>
+        </div>
       </div>
     </div>
   );

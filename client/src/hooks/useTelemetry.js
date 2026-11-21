@@ -138,6 +138,31 @@ export function useTelemetry(targetDeviceId = 'TURBINE_001', maxDataPoints = 30)
     }
   }, [targetDeviceId]);
 
+  // Bulk toggle power for all machines (start_all | stop_all)
+  const bulkTogglePower = useCallback(async (action) => {
+    setCapacityError(null);
+    try {
+      const res = await telemetryService.bulkToggle(action);
+      if (res.devices) {
+        setDevices(res.devices);
+        const targetDev = res.devices.find((d) => d.deviceId === targetDeviceId);
+        if (targetDev?.lastReading) {
+          setCurrentReading(targetDev.lastReading);
+          setDataPoints((prev) => [...prev, targetDev.lastReading]);
+        }
+      }
+      if (res.capacity) {
+        setCapacity(res.capacity);
+      }
+      return res;
+    } catch (err) {
+      const msg = err.response?.data?.error || err.message || 'Bulk power operation failed.';
+      setCapacityError(msg);
+      setTimeout(() => setCapacityError(null), 5000);
+      throw err;
+    }
+  }, [targetDeviceId]);
+
   const runningDevices = useMemo(
     () => devices.filter((d) => d.status === 'online'),
     [devices]
@@ -148,6 +173,52 @@ export function useTelemetry(targetDeviceId = 'TURBINE_001', maxDataPoints = 30)
     [devices]
   );
 
+  // Compute fleet-wide real-time analytics across all currently active equipment
+  const fleetStats = useMemo(() => {
+    const active = runningDevices;
+    if (active.length === 0) {
+      return {
+        avgTemp: 0,
+        avgPressure: 0,
+        avgHumidity: 0,
+        hottestDevice: null,
+        activeCount: 0,
+        standbyCount: devices.length,
+        hasOverheat: false,
+      };
+    }
+
+    let sumT = 0, sumP = 0, sumH = 0;
+    let maxT = -Infinity;
+    let hottest = null;
+
+    active.forEach((d) => {
+      const r = d.lastReading || {};
+      const t = Number(r.temperature || 0);
+      const p = Number(r.pressure || 0);
+      const h = Number(r.humidity || 0);
+
+      sumT += t;
+      sumP += p;
+      sumH += h;
+
+      if (t > maxT) {
+        maxT = t;
+        hottest = { deviceId: d.deviceId, name: d.name, temp: t };
+      }
+    });
+
+    return {
+      avgTemp: Math.round((sumT / active.length) * 10) / 10,
+      avgPressure: Math.round(sumP / active.length),
+      avgHumidity: Math.round(sumH / active.length),
+      hottestDevice: hottest,
+      activeCount: active.length,
+      standbyCount: devices.length - active.length,
+      hasOverheat: maxT > 80,
+    };
+  }, [runningDevices, devices.length]);
+
   return {
     dataPoints,
     currentReading,
@@ -155,9 +226,11 @@ export function useTelemetry(targetDeviceId = 'TURBINE_001', maxDataPoints = 30)
     runningDevices,
     standbyDevices,
     capacity,
+    fleetStats,
     capacityError,
     clearCapacityError: () => setCapacityError(null),
     isConnected,
     togglePower,
+    bulkTogglePower,
   };
 }

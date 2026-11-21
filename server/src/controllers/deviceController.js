@@ -216,3 +216,67 @@ export function toggleDevice(req, res) {
     capacity,
   });
 }
+
+/**
+ * Bulk start or stop all factory machines at once
+ */
+export function bulkToggleDevices(req, res) {
+  const { action } = req.body; // 'start_all' | 'stop_all'
+  const turnOn = action === 'start_all';
+
+  devices.forEach((dev) => {
+    dev.status = turnOn ? 'online' : 'offline';
+    dev.powered = turnOn;
+
+    if (turnOn) {
+      const profile = MACHINE_OPERATIONAL_PROFILES[dev.deviceId] || {
+        temperature: 60.0,
+        pressure: 100,
+        humidity: 45,
+      };
+      dev.lastReading = {
+        ...dev.lastReading,
+        temperature: profile.temperature,
+        pressure: profile.pressure,
+        humidity: profile.humidity,
+        status: 'online',
+        timestamp: new Date().toISOString(),
+      };
+    } else {
+      dev.lastReading = {
+        ...dev.lastReading,
+        temperature: 24.0,
+        pressure: 0,
+        status: 'offline',
+        timestamp: new Date().toISOString(),
+      };
+    }
+
+    if (socketServerRef) {
+      socketServerRef.emitToFactory('FACTORY_01', 'device:status', {
+        deviceId: dev.deviceId,
+        status: dev.status,
+        powered: dev.powered,
+        lastReading: dev.lastReading,
+      });
+      if (turnOn) {
+        socketServerRef.emitToFactory('FACTORY_01', 'telemetry:update', {
+          deviceId: dev.deviceId,
+          factoryId: 'FACTORY_01',
+          ...dev.lastReading,
+        });
+      }
+    }
+  });
+
+  const capacity = getServerCapacity();
+  if (socketServerRef) {
+    socketServerRef.emitToFactory('FACTORY_01', 'capacity:update', capacity);
+  }
+
+  res.json({
+    message: turnOn ? 'All machines started and streaming live.' : 'All machines safely powered down to standby.',
+    devices,
+    capacity,
+  });
+}

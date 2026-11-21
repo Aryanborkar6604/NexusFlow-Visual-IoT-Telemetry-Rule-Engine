@@ -35,4 +35,9 @@ export const telemetryService = {
     const res = await apiClient.post(`/devices/${deviceId}/toggle`);
     return res.data;
   },
+
+  async bulkToggle(action) {
+    const res = await apiClient.post('/devices/bulk', { action });
+    return res.data;
+  },
 };
