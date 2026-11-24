@@ -15,7 +15,8 @@ npm run dev
 ## Current scope
 
 - A React Flow canvas with source, moving average, condition, and action nodes.
-- Connectable ports, selectable nodes, a settings inspector, and a node library.
-- Local rule preview and JSON export using the backend's `{ name, enabled, graph: { nodes, edges } }` shape.
+- Connectable ports, selectable nodes, editable settings, and a node library.
+- A local rule preview that calculates moving averages, evaluates conditions, and highlights triggered actions.
+- Browser draft persistence and JSON export using `{ name, enabled, graph: { nodes, edges } }`.
 
-The canvas currently uses sample turbine telemetry. Persistence, authenticated API calls, live telemetry, and alert delivery connect to the backend in later integration work.
+The preview uses sample turbine telemetry. Authenticated API calls, live telemetry, and alert delivery still need backend integration.
