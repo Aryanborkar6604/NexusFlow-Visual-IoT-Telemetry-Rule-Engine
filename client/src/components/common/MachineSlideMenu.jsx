@@ -142,9 +142,9 @@ export function MachineSlideMenu() {
                 Machines Control Bar
               </h2>
               <div className="flex items-center gap-1.5 text-[11px] font-mono">
-                <span className="text-emerald-400 font-bold">{onlineCount} ON</span>
+                <span className="text-emerald-400 font-bold tabular-nums">{onlineCount} ON</span>
                 <span className="text-slate-600">•</span>
-                <span className="text-slate-400">{offlineCount} OFF</span>
+                <span className="text-slate-400 tabular-nums">{offlineCount} OFF</span>
               </div>
             </div>
           </div>
@@ -361,7 +361,7 @@ export function MachineSlideMenu() {
                   </div>
 
                   {/* Live Sensor Strip inside each machine row */}
-                  <div className="mt-2.5 pt-2 border-t border-slate-800/70 flex items-center justify-between text-[11px] font-mono">
+                  <div className="mt-2.5 pt-2 border-t border-slate-800/70 flex items-center justify-between text-[11px] font-mono tabular-nums">
                     {isOnline ? (
                       <>
                         <span

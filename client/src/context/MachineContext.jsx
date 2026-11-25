@@ -19,6 +19,19 @@ export function MachineProvider({ children }) {
   const [togglingMap, setTogglingMap] = useState({});
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isMenuPinned, setIsMenuPinned] = useState(false);
+  const [toasts, setToasts] = useState([]);
+
+  const dismissToast = useCallback((id) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
+
+  const notifyToast = useCallback(({ title, message, type = 'info' }) => {
+    const id = `toast_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    setToasts((prev) => [...prev.slice(-2), { id, title, message, type }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 3400);
+  }, []);
 
   const loadDevices = useCallback(async () => {
     try {
@@ -100,6 +113,13 @@ export function MachineProvider({ children }) {
         if (res.device.powered) {
           setSelectedDeviceId(deviceId);
         }
+        notifyToast({
+          title: `${res.device.name} ${res.device.powered ? 'Started' : 'Stopped'}`,
+          message: res.device.powered
+            ? 'Operational telemetry streaming live at 1Hz.'
+            : 'Unit cooled down safely to standby mode.',
+          type: res.device.powered ? 'success' : 'info',
+        });
       }
       if (res.capacity) {
         setCapacity(res.capacity);
@@ -108,6 +128,7 @@ export function MachineProvider({ children }) {
     } catch (err) {
       const msg = err.response?.data?.error || err.message || 'Failed to toggle machine power.';
       setCapacityError(msg);
+      notifyToast({ title: 'Power Switch Error', message: msg, type: 'error' });
       if (err.response?.data?.capacity) {
         setCapacity(err.response.data.capacity);
       }
@@ -120,7 +141,7 @@ export function MachineProvider({ children }) {
         return next;
       });
     }
-  }, []);
+  }, [notifyToast]);
 
   const bulkTogglePower = useCallback(async (action) => {
     setCapacityError(null);
@@ -133,10 +154,16 @@ export function MachineProvider({ children }) {
       if (res.capacity) {
         setCapacity(res.capacity);
       }
+      notifyToast({
+        title: action === 'start_all' ? 'All Machines Started' : 'Emergency Standby Complete',
+        message: res.message || 'Fleet power states updated.',
+        type: action === 'start_all' ? 'success' : 'info',
+      });
       return res;
     } catch (err) {
       const msg = err.response?.data?.error || err.message || 'Bulk power operation failed.';
       setCapacityError(msg);
+      notifyToast({ title: 'Bulk Power Error', message: msg, type: 'error' });
       setTimeout(() => setCapacityError(null), 5000);
       throw err;
     } finally {
@@ -146,7 +173,7 @@ export function MachineProvider({ children }) {
         return next;
       });
     }
-  }, []);
+  }, [notifyToast]);
 
   const runningDevices = useMemo(
     () => devices.filter((d) => d.status === 'online'),
@@ -234,6 +261,9 @@ export function MachineProvider({ children }) {
     isMenuPinned,
     setIsMenuPinned,
     toggleMenuPin,
+    toasts,
+    notifyToast,
+    dismissToast,
   };
 
   return <MachineContext.Provider value={value}>{children}</MachineContext.Provider>;

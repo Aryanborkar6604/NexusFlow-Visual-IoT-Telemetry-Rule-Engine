@@ -302,7 +302,7 @@ export function FlowCanvas({ initialWorkflowId = 'wf_turbine_01' }) {
         <div className="flex items-center gap-2">
           <button
             onClick={handleSave}
-            className="flex items-center gap-1.5 text-xs bg-slate-800 hover:bg-slate-700 text-white px-3 py-1.5 rounded-md font-medium border border-slate-700 transition-colors shadow-sm"
+            className="flex items-center gap-1.5 text-xs bg-slate-800 hover:bg-slate-700 text-white px-3.5 py-1.5 rounded-xl font-semibold border border-slate-700 transition-all shadow-sm active:scale-95 cursor-pointer"
           >
             <Save className="w-3.5 h-3.5" />
             Save Workflow
@@ -310,7 +310,7 @@ export function FlowCanvas({ initialWorkflowId = 'wf_turbine_01' }) {
 
           <button
             onClick={handleToggle}
-            className={`flex items-center gap-1.5 text-xs px-3.5 py-1.5 rounded-md font-semibold transition-all shadow-sm ${
+            className={`flex items-center gap-1.5 text-xs px-4 py-1.5 rounded-xl font-bold transition-all shadow-sm active:scale-95 cursor-pointer ${
               isRunning
                 ? 'bg-amber-600 hover:bg-amber-500 text-white'
                 : 'bg-emerald-600 hover:bg-emerald-500 text-white'
@@ -353,6 +353,7 @@ export function FlowCanvas({ initialWorkflowId = 'wf_turbine_01' }) {
         {/* Center: React Flow Canvas */}
         <div className="flex-1 h-full relative" ref={reactFlowWrapper}>
           <ReactFlow
+            colorMode="dark"
             nodes={nodes}
             edges={edges}
             nodeTypes={nodeTypes}
@@ -366,7 +367,7 @@ export function FlowCanvas({ initialWorkflowId = 'wf_turbine_01' }) {
             fitView
           >
             <Background color="#334155" gap={20} size={1} />
-            <Controls className="!bg-slate-900 !border-slate-800 !text-white" />
+            <Controls className="!bg-slate-900 !border !border-slate-800 !rounded-xl !overflow-hidden !shadow-xl" />
             <MiniMap
               nodeStrokeColor="#475569"
               nodeColor="#1e293b"

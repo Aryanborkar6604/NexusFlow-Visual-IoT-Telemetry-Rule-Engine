@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 
 export function DashboardPage() {
-  const { selectedDeviceId, setSelectedDeviceId, toggleMenu, isMenuOpen } = useMachines();
+  const { selectedDeviceId, setSelectedDeviceId, toggleMenu, isMenuOpen, notifyToast } = useMachines();
   const [alerts, setAlerts] = useState([]);
   const [isSpiking, setIsSpiking] = useState(false);
 
@@ -50,6 +50,11 @@ export function DashboardPage() {
     setIsSpiking(true);
     try {
       await alertService.triggerTestSpike(selectedDeviceId, 94.2);
+      notifyToast({
+        title: `Thermal Spike Injected (${selectedDeviceId})`,
+        message: 'Simulated 94.2°C reading triggered threshold sentinel.',
+        type: 'warning',
+      });
     } catch (err) {
       console.warn('Spike trigger error:', err);
     } finally {
@@ -159,9 +164,9 @@ export function DashboardPage() {
       </div>
 
       {/* Top Banner & KPI Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 tabular-nums">
         {/* KPI 1: Fleet Capacity & Running Count */}
-        <div className="bg-gradient-to-b from-slate-900 to-slate-900/90 border border-slate-800 p-4 rounded-2xl shadow-lg flex flex-col justify-between">
+        <div className="bg-gradient-to-b from-slate-900 to-slate-900/90 border border-slate-800 hover:border-slate-700/90 transition-colors p-4 rounded-2xl shadow-lg flex flex-col justify-between">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs text-slate-400 font-medium">Fleet Online Capacity</span>
             <div className="p-2 rounded-xl bg-blue-500/10 text-blue-400 border border-blue-500/20">

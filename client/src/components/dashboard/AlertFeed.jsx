@@ -1,17 +1,25 @@
 import React, { useState } from 'react';
-import { BellRing, ShieldAlert, Clock, Activity, Zap, Flame, Thermometer, Gauge, Droplets } from 'lucide-react';
+import { BellRing, ShieldAlert, Clock, Activity, Zap, Flame } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { alertService } from '../../services/alertService.js';
+import { useMachines } from '../../context/MachineContext.jsx';
 
 export function AlertFeed({ alerts = [], runningDevices = [], activeDeviceId, onSelectDevice }) {
   const [activeTab, setActiveTab] = useState('running'); // 'running' | 'alerts'
   const [isSpiking, setIsSpiking] = useState(false);
+  const { notifyToast } = useMachines();
 
   const handleTriggerSpike = async (e) => {
     e.stopPropagation();
+    const target = activeDeviceId || 'TURBINE_001';
     setIsSpiking(true);
     try {
-      await alertService.triggerTestSpike(activeDeviceId || 'TURBINE_001', 93.5);
+      await alertService.triggerTestSpike(target, 93.5);
+      notifyToast({
+        title: `Spike Test Fired on ${target}`,
+        message: '93.5°C reading dispatched to Alert Sentinel.',
+        type: 'warning',
+      });
     } catch (err) {
       console.warn('Failed to trigger spike:', err.message);
     } finally {
@@ -20,7 +28,7 @@ export function AlertFeed({ alerts = [], runningDevices = [], activeDeviceId, on
   };
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-sm flex flex-col h-full">
+    <div className="bg-gradient-to-b from-slate-900 to-slate-900/90 border border-slate-800 rounded-2xl p-4 shadow-xl flex flex-col lg:sticky lg:top-[82px] lg:max-h-[calc(100vh-106px)]">
       {/* Header */}
       <div className="flex items-center justify-between mb-3 pb-2.5 border-b border-slate-800">
         <div className="flex items-center gap-2">
@@ -83,7 +91,7 @@ export function AlertFeed({ alerts = [], runningDevices = [], activeDeviceId, on
       </div>
 
       {/* Body Content */}
-      <div className="space-y-2 flex-1 overflow-y-auto max-h-[420px] pr-1">
+      <div className="space-y-2 flex-1 overflow-y-auto nexus-scrollbar max-h-[520px] lg:max-h-none pr-1">
         {activeTab === 'running' ? (
           /* Running Machines Live Readout Stream */
           runningDevices.length === 0 ? (
@@ -122,7 +130,7 @@ export function AlertFeed({ alerts = [], runningDevices = [], activeDeviceId, on
                   </div>
 
                   {/* 3 Real-time Live Sensor Readouts */}
-                  <div className="grid grid-cols-3 gap-1.5 text-center my-1.5">
+                  <div className="grid grid-cols-3 gap-1.5 text-center my-1.5 tabular-nums">
                     <div className="bg-slate-900/90 py-1 px-1 rounded border border-slate-800/80">
                       <span className="text-[9px] text-slate-400 block font-mono">TEMP</span>
                       <span className={`text-xs font-mono font-bold ${isOverheat ? 'text-red-400 animate-pulse' : 'text-blue-300'}`}>

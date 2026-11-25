@@ -260,7 +260,7 @@ export function DeviceList({
 
               {/* Status Badge & Sensor Readings */}
               {isOnline ? (
-                <div className="grid grid-cols-3 gap-2 pt-2.5 border-t border-slate-800/80 text-xs">
+                <div className="grid grid-cols-3 gap-2 pt-2.5 border-t border-slate-800/80 text-xs tabular-nums">
                   <div className={`p-2 rounded-xl border ${
                     isOverheat
                       ? 'bg-red-950/30 border-red-900/50'

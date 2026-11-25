@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Activity,
@@ -21,13 +21,28 @@ export function Navbar() {
   const navigate = useNavigate();
   const { isConnected } = useSocket();
   const { user, logout, isAuthenticated } = useAuth();
-  const { devices, runningDevices, isMenuOpen, toggleMenu } = useMachines();
+  const { devices, runningDevices, selectedDeviceId, isMenuOpen, toggleMenu, notifyToast } = useMachines();
+  const [spiking, setSpiking] = useState(false);
 
   const handleTriggerSpike = async () => {
+    const target = selectedDeviceId || 'TURBINE_001';
+    setSpiking(true);
     try {
-      await alertService.triggerTestSpike('TURBINE_001', 89.2);
+      await alertService.triggerTestSpike(target, 91.5);
+      notifyToast({
+        title: `Spike Injected on ${target}`,
+        message: '91.5°C overheat reading sent to live alert sentinel.',
+        type: 'warning',
+      });
     } catch (err) {
       console.error('Spike trigger failed:', err);
+      notifyToast({
+        title: 'Spike Trigger Failed',
+        message: err.message || 'Could not contact telemetry server.',
+        type: 'error',
+      });
+    } finally {
+      setTimeout(() => setSpiking(false), 900);
     }
   };
 
@@ -112,11 +127,12 @@ export function Navbar() {
           {/* Quick Demo Spike Trigger */}
           <button
             onClick={handleTriggerSpike}
-            title="Inject simulated 89°C turbine spike to trigger alert"
-            className="flex items-center gap-1.5 text-xs bg-red-950/60 hover:bg-red-900/80 text-red-300 border border-red-800/60 px-2.5 py-1.5 rounded-md font-medium transition-all shadow-sm active:scale-95 cursor-pointer"
+            disabled={spiking}
+            title={`Inject simulated 91.5°C overheat spike on ${selectedDeviceId || 'TURBINE_001'}`}
+            className="flex items-center gap-1.5 text-xs bg-red-950/60 hover:bg-red-900/80 text-red-300 border border-red-800/60 px-2.5 py-1.5 rounded-lg font-medium transition-all shadow-sm active:scale-95 cursor-pointer disabled:opacity-50"
           >
             <Flame className="w-3.5 h-3.5 text-red-400 animate-pulse" />
-            <span className="hidden sm:inline">Simulate Spike</span>
+            <span className="hidden sm:inline">{spiking ? 'Sending...' : 'Simulate Spike'}</span>
           </button>
 
           {/* Socket.IO Connection Pill */}

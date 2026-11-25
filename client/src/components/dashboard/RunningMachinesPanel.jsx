@@ -153,7 +153,7 @@ export function RunningMachinesPanel({
                 </div>
 
                 {/* Big Real-Time Readouts */}
-                <div className="space-y-2">
+                <div className="space-y-2 tabular-nums">
                   <div className={`flex items-center justify-between rounded-xl px-3 py-2 border transition-all ${
                     isOverheat
                       ? 'bg-red-950/30 border-red-900/50'

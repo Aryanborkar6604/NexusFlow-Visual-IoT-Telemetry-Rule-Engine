@@ -1,6 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import {
   ResponsiveContainer,
+  AreaChart,
+  Area,
   LineChart,
   Line,
   XAxis,
@@ -10,7 +12,7 @@ import {
   ReferenceLine,
   Legend,
 } from 'recharts';
-import { Activity, Thermometer, Gauge, Droplets, Power, Layers, TrendingUp, Maximize2 } from 'lucide-react';
+import { Activity, Thermometer, Gauge, Droplets, Power, Layers } from 'lucide-react';
 
 export function LiveChart({
   dataPoints = [],
@@ -102,7 +104,7 @@ export function LiveChart({
         </div>
 
         {/* Live Metrics Callout */}
-        <div className="text-right">
+        <div className="text-right tabular-nums">
           <span className="text-[10px] uppercase font-mono text-slate-400 block">
             {selectedMetric === 'all' ? 'Live Temp / Pressure' : `Current ${currentCfg.label}`}
           </span>
@@ -177,7 +179,7 @@ export function LiveChart({
             <Activity className="w-6 h-6 animate-pulse text-blue-500" />
             <p>Connecting to 1Hz sensor feed and streaming live readings for {deviceId}...</p>
           </div>
-        ) : (
+        ) : selectedMetric === 'all' ? (
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={chartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
@@ -202,10 +204,79 @@ export function LiveChart({
                   boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)',
                 }}
               />
-              {selectedMetric === 'all' && <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '6px' }} />}
-              
-              {/* Alert Threshold Line */}
-              {(selectedMetric === 'temperature' || selectedMetric === 'all') && (
+              <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '6px' }} />
+              <ReferenceLine
+                y={threshold}
+                stroke="#ef4444"
+                strokeDasharray="4 4"
+                label={{
+                  value: `Threshold: ${threshold}°C`,
+                  fill: '#ef4444',
+                  fontSize: 10,
+                  position: 'insideTopRight',
+                }}
+              />
+              <Line
+                type="monotone"
+                name="Temperature (°C)"
+                dataKey="temperature"
+                stroke="#3b82f6"
+                strokeWidth={2}
+                dot={{ r: 1.5, fill: '#3b82f6' }}
+                isAnimationActive={false}
+              />
+              <Line
+                type="monotone"
+                name="Pressure (PSI)"
+                dataKey="pressure"
+                stroke="#f59e0b"
+                strokeWidth={2}
+                dot={{ r: 1.5, fill: '#f59e0b' }}
+                isAnimationActive={false}
+              />
+              <Line
+                type="monotone"
+                name="Humidity (%)"
+                dataKey="humidity"
+                stroke="#10b981"
+                strokeWidth={2}
+                dot={{ r: 1.5, fill: '#10b981' }}
+                isAnimationActive={false}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        ) : (
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+              <defs>
+                <linearGradient id={`metricGradient-${selectedMetric}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor={currentCfg.color} stopOpacity={0.35} />
+                  <stop offset="95%" stopColor={currentCfg.color} stopOpacity={0.0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+              <XAxis
+                dataKey="timeStr"
+                stroke="#64748b"
+                tick={{ fontSize: 10 }}
+                interval="preserveStartEnd"
+              />
+              <YAxis
+                domain={['auto', 'auto']}
+                stroke="#64748b"
+                tick={{ fontSize: 10 }}
+              />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: '#0f172a',
+                  borderColor: '#334155',
+                  borderRadius: '0.75rem',
+                  fontSize: '12px',
+                  color: '#fff',
+                  boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)',
+                }}
+              />
+              {selectedMetric === 'temperature' && (
                 <ReferenceLine
                   y={threshold}
                   stroke="#ef4444"
@@ -218,56 +289,25 @@ export function LiveChart({
                   }}
                 />
               )}
-
-              {selectedMetric === 'all' ? (
-                <>
-                  <Line
-                    type="monotone"
-                    name="Temperature (°C)"
-                    dataKey="temperature"
-                    stroke="#3b82f6"
-                    strokeWidth={2}
-                    dot={{ r: 1.5, fill: '#3b82f6' }}
-                    isAnimationActive={false}
-                  />
-                  <Line
-                    type="monotone"
-                    name="Pressure (PSI)"
-                    dataKey="pressure"
-                    stroke="#f59e0b"
-                    strokeWidth={2}
-                    dot={{ r: 1.5, fill: '#f59e0b' }}
-                    isAnimationActive={false}
-                  />
-                  <Line
-                    type="monotone"
-                    name="Humidity (%)"
-                    dataKey="humidity"
-                    stroke="#10b981"
-                    strokeWidth={2}
-                    dot={{ r: 1.5, fill: '#10b981' }}
-                    isAnimationActive={false}
-                  />
-                </>
-              ) : (
-                <Line
-                  type="monotone"
-                  name={currentCfg.label}
-                  dataKey={selectedMetric}
-                  stroke={currentCfg.color}
-                  strokeWidth={2.5}
-                  dot={{ r: 2, fill: currentCfg.color }}
-                  activeDot={{ r: 5, fill: currentCfg.color }}
-                  isAnimationActive={false}
-                />
-              )}
-            </LineChart>
+              <Area
+                type="monotone"
+                name={currentCfg.label}
+                dataKey={selectedMetric}
+                stroke={currentCfg.color}
+                strokeWidth={2.5}
+                fillOpacity={1}
+                fill={`url(#metricGradient-${selectedMetric})`}
+                dot={{ r: 2, fill: currentCfg.color }}
+                activeDot={{ r: 5, fill: currentCfg.color }}
+                isAnimationActive={false}
+              />
+            </AreaChart>
           </ResponsiveContainer>
         )}
       </div>
 
       {/* Statistical Analytics Drawer */}
-      <div className="mt-3 pt-3 border-t border-slate-800/80 flex flex-wrap items-center justify-between text-xs text-slate-400 font-mono gap-2">
+      <div className="mt-3 pt-3 border-t border-slate-800/80 flex flex-wrap items-center justify-between text-xs text-slate-400 font-mono tabular-nums gap-2">
         <div className="flex items-center gap-4">
           <span>Min: <strong className="text-white">{stats.min}</strong> {selectedMetric === 'all' ? '°C' : currentCfg.unit}</span>
           <span>Avg: <strong className="text-white">{stats.avg}</strong> {selectedMetric === 'all' ? '°C' : currentCfg.unit}</span>
