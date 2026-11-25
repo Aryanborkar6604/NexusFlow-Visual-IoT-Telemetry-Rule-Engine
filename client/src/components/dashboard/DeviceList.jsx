@@ -2,33 +2,16 @@ import React, { useState, useMemo } from 'react';
 import {
   Cpu,
   Power,
-  Activity,
   Thermometer,
   Gauge,
   Droplets,
-  CheckCircle2,
   XCircle,
   AlertTriangle,
   Search,
-  SlidersHorizontal,
   PlaySquare,
   Square,
-  Wind,
-  Bot,
-  Layers,
-  Flame,
-  Zap,
 } from 'lucide-react';
-
-const MACHINE_ICONS = {
-  Turbine: Wind,
-  Pump: Activity,
-  Boiler: Flame,
-  Conveyor: Layers,
-  'Robotic Arm': Bot,
-  Compressor: Gauge,
-  Generator: Zap,
-};
+import { getMachineIcon } from '../../utils/machineIcons.js';
 
 export function DeviceList({
   devices = [],
@@ -193,7 +176,7 @@ export function DeviceList({
           const isSelected = device.deviceId === activeDeviceId;
           const isOnline = device.status === 'online';
           const reading = device.lastReading || {};
-          const Icon = MACHINE_ICONS[device.type] || Activity;
+          const Icon = getMachineIcon(device.type);
           const temp = Number(reading.temperature ?? 0);
           const isOverheat = isOnline && temp > 80;
 

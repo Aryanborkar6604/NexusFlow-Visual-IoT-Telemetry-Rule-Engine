@@ -7,25 +7,9 @@ import {
   Power,
   Server,
   Clock,
-  Wind,
-  Bot,
-  Layers,
-  Flame,
-  Zap,
-  CheckCircle2,
-  AlertTriangle,
   Radio,
 } from 'lucide-react';
-
-const MACHINE_ICONS = {
-  Turbine: Wind,
-  Pump: Activity,
-  Boiler: Flame,
-  Conveyor: Layers,
-  'Robotic Arm': Bot,
-  Compressor: Gauge,
-  Generator: Zap,
-};
+import { getMachineIcon } from '../../utils/machineIcons.js';
 
 export function RunningMachinesPanel({
   runningDevices = [],
@@ -98,7 +82,7 @@ export function RunningMachinesPanel({
           {runningDevices.map((device) => {
             const reading = device.lastReading || {};
             const isSelected = device.deviceId === activeDeviceId;
-            const Icon = MACHINE_ICONS[device.type] || Activity;
+            const Icon = getMachineIcon(device.type);
             const temp = Number(reading.temperature ?? 0);
             const isOverheat = temp > 80;
             const isWarm = temp >= 70 && temp <= 80;
@@ -236,7 +220,7 @@ export function RunningMachinesPanel({
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             {standbyDevices.map((d) => {
-              const Icon = MACHINE_ICONS[d.type] || Activity;
+              const Icon = getMachineIcon(d.type);
               return (
                 <button
                   key={d.deviceId}

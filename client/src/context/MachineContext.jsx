@@ -1,0 +1,248 @@
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import { useSocket } from './SocketContext.jsx';
+import { telemetryService } from '../services/telemetryService.js';
+
+const MachineContext = createContext(null);
+
+export function MachineProvider({ children }) {
+  const { socket, isConnected } = useSocket();
+  const [devices, setDevices] = useState([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState('TURBINE_001');
+  const [capacity, setCapacity] = useState({
+    activeCount: 0,
+    maxCapacity: 4,
+    availableSlots: 4,
+    loadPercent: 0,
+    status: 'idle',
+  });
+  const [capacityError, setCapacityError] = useState(null);
+  const [togglingMap, setTogglingMap] = useState({});
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isMenuPinned, setIsMenuPinned] = useState(false);
+
+  const loadDevices = useCallback(async () => {
+    try {
+      const { devices: devList, capacity: cap } = await telemetryService.getDevicesWithCapacity();
+      setDevices(devList);
+      if (cap) setCapacity(cap);
+    } catch (err) {
+      console.warn('[MachineContext] Failed to load devices:', err.message);
+    }
+  }, []);
+
+  // Load initial devices & refresh on socket reconnect
+  useEffect(() => {
+    loadDevices();
+  }, [loadDevices, isConnected]);
+
+  // Listen to real-time Socket.IO telemetry & device power updates
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleUpdate = (reading) => {
+      setDevices((prev) =>
+        prev.map((d) =>
+          d.deviceId === reading.deviceId
+            ? {
+                ...d,
+                lastReading: reading,
+                status: reading.status !== undefined ? reading.status : d.status,
+                powered: reading.status !== 'offline',
+              }
+            : d
+        )
+      );
+    };
+
+    const handleDeviceStatus = (payload) => {
+      setDevices((prev) =>
+        prev.map((d) =>
+          d.deviceId === payload.deviceId
+            ? {
+                ...d,
+                status: payload.status,
+                powered: payload.powered,
+                lastReading: payload.lastReading || d.lastReading,
+              }
+            : d
+        )
+      );
+
+      if (payload.capacity) {
+        setCapacity(payload.capacity);
+      }
+    };
+
+    const handleCapacityUpdate = (cap) => {
+      if (cap) setCapacity(cap);
+    };
+
+    socket.on('telemetry:update', handleUpdate);
+    socket.on('device:status', handleDeviceStatus);
+    socket.on('capacity:update', handleCapacityUpdate);
+
+    return () => {
+      socket.off('telemetry:update', handleUpdate);
+      socket.off('device:status', handleDeviceStatus);
+      socket.off('capacity:update', handleCapacityUpdate);
+    };
+  }, [socket]);
+
+  const togglePower = useCallback(async (deviceId) => {
+    setCapacityError(null);
+    setTogglingMap((prev) => ({ ...prev, [deviceId]: true }));
+    try {
+      const res = await telemetryService.toggleDevice(deviceId);
+      if (res.device) {
+        setDevices((prev) =>
+          prev.map((d) => (d.deviceId === deviceId ? res.device : d))
+        );
+        if (res.device.powered) {
+          setSelectedDeviceId(deviceId);
+        }
+      }
+      if (res.capacity) {
+        setCapacity(res.capacity);
+      }
+      return res;
+    } catch (err) {
+      const msg = err.response?.data?.error || err.message || 'Failed to toggle machine power.';
+      setCapacityError(msg);
+      if (err.response?.data?.capacity) {
+        setCapacity(err.response.data.capacity);
+      }
+      setTimeout(() => setCapacityError(null), 5000);
+      throw err;
+    } finally {
+      setTogglingMap((prev) => {
+        const next = { ...prev };
+        delete next[deviceId];
+        return next;
+      });
+    }
+  }, []);
+
+  const bulkTogglePower = useCallback(async (action) => {
+    setCapacityError(null);
+    setTogglingMap((prev) => ({ ...prev, __bulk__: true }));
+    try {
+      const res = await telemetryService.bulkToggle(action);
+      if (res.devices) {
+        setDevices(res.devices);
+      }
+      if (res.capacity) {
+        setCapacity(res.capacity);
+      }
+      return res;
+    } catch (err) {
+      const msg = err.response?.data?.error || err.message || 'Bulk power operation failed.';
+      setCapacityError(msg);
+      setTimeout(() => setCapacityError(null), 5000);
+      throw err;
+    } finally {
+      setTogglingMap((prev) => {
+        const next = { ...prev };
+        delete next.__bulk__;
+        return next;
+      });
+    }
+  }, []);
+
+  const runningDevices = useMemo(
+    () => devices.filter((d) => d.status === 'online'),
+    [devices]
+  );
+
+  const standbyDevices = useMemo(
+    () => devices.filter((d) => d.status !== 'online'),
+    [devices]
+  );
+
+  const fleetStats = useMemo(() => {
+    if (runningDevices.length === 0) {
+      return {
+        avgTemp: 0,
+        avgPressure: 0,
+        avgHumidity: 0,
+        hottestDevice: null,
+        activeCount: 0,
+        standbyCount: devices.length,
+        hasOverheat: false,
+      };
+    }
+
+    let sumT = 0;
+    let sumP = 0;
+    let sumH = 0;
+    let maxT = -Infinity;
+    let hottest = null;
+
+    runningDevices.forEach((d) => {
+      const r = d.lastReading || {};
+      const t = Number(r.temperature || 0);
+      const p = Number(r.pressure || 0);
+      const h = Number(r.humidity || 0);
+
+      sumT += t;
+      sumP += p;
+      sumH += h;
+
+      if (t > maxT) {
+        maxT = t;
+        hottest = { deviceId: d.deviceId, name: d.name, temp: t };
+      }
+    });
+
+    return {
+      avgTemp: Math.round((sumT / runningDevices.length) * 10) / 10,
+      avgPressure: Math.round(sumP / runningDevices.length),
+      avgHumidity: Math.round(sumH / runningDevices.length),
+      hottestDevice: hottest,
+      activeCount: runningDevices.length,
+      standbyCount: devices.length - runningDevices.length,
+      hasOverheat: maxT > 80,
+    };
+  }, [runningDevices, devices.length]);
+
+  const toggleMenu = useCallback(() => setIsMenuOpen((prev) => !prev), []);
+  const openMenu = useCallback(() => setIsMenuOpen(true), []);
+  const closeMenu = useCallback(() => {
+    setIsMenuOpen(false);
+    setIsMenuPinned(false);
+  }, []);
+  const toggleMenuPin = useCallback(() => setIsMenuPinned((prev) => !prev), []);
+
+  const value = {
+    devices,
+    runningDevices,
+    standbyDevices,
+    capacity,
+    fleetStats,
+    capacityError,
+    clearCapacityError: () => setCapacityError(null),
+    selectedDeviceId,
+    setSelectedDeviceId,
+    togglingMap,
+    isConnected,
+    togglePower,
+    bulkTogglePower,
+    isMenuOpen,
+    setIsMenuOpen,
+    toggleMenu,
+    openMenu,
+    closeMenu,
+    isMenuPinned,
+    setIsMenuPinned,
+    toggleMenuPin,
+  };
+
+  return <MachineContext.Provider value={value}>{children}</MachineContext.Provider>;
+}
+
+export function useMachines() {
+  const ctx = useContext(MachineContext);
+  if (!ctx) {
+    throw new Error('useMachines must be used within a MachineProvider');
+  }
+  return ctx;
+}

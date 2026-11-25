@@ -1,29 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import { useTelemetry } from '../hooks/useTelemetry.js';
 import { useSocket } from '../context/SocketContext.jsx';
+import { useMachines } from '../context/MachineContext.jsx';
 import { alertService } from '../services/alertService.js';
 import { DeviceList } from '../components/dashboard/DeviceList.jsx';
 import { LiveChart } from '../components/dashboard/LiveChart.jsx';
 import { AlertFeed } from '../components/dashboard/AlertFeed.jsx';
 import { RunningMachinesPanel } from '../components/dashboard/RunningMachinesPanel.jsx';
 import {
-  Activity,
   ShieldCheck,
   Server,
   Flame,
   Gauge,
-  Droplets,
   Thermometer,
-  Radio,
-  Zap,
   PlaySquare,
   Square,
-  Sparkles,
   Building2,
+  SlidersHorizontal,
 } from 'lucide-react';
 
 export function DashboardPage() {
-  const [selectedDeviceId, setSelectedDeviceId] = useState('TURBINE_001');
+  const { selectedDeviceId, setSelectedDeviceId, toggleMenu, isMenuOpen } = useMachines();
   const [alerts, setAlerts] = useState([]);
   const [isSpiking, setIsSpiking] = useState(false);
 
@@ -46,11 +43,7 @@ export function DashboardPage() {
   const isSelectedOnline = selectedDevice ? selectedDevice.status === 'online' : true;
 
   const handleTogglePower = async (deviceId) => {
-    const isCurrentlyOnline = devices.find((d) => d.deviceId === deviceId)?.status === 'online';
     await togglePower(deviceId);
-    if (!isCurrentlyOnline) {
-      setSelectedDeviceId(deviceId);
-    }
   };
 
   const handleDemoSpike = async () => {
@@ -121,6 +114,20 @@ export function DashboardPage() {
 
         {/* Global Quick Action Toolbar */}
         <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={toggleMenu}
+            title="Slide open quick machines ON/OFF menu bar"
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold border transition-all active:scale-95 cursor-pointer ${
+              isMenuOpen
+                ? 'bg-blue-600 text-white border-blue-400 shadow-lg shadow-blue-950/50'
+                : 'bg-blue-950/60 hover:bg-blue-600 text-blue-300 hover:text-white border-blue-700/70'
+            }`}
+          >
+            <SlidersHorizontal className="w-4 h-4" />
+            <span>Machines Slide Menu</span>
+          </button>
+
           <button
             onClick={() => bulkTogglePower && bulkTogglePower('start_all')}
             title="Start all factory equipment simultaneously"

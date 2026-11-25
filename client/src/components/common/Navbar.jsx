@@ -1,8 +1,19 @@
 import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Activity, GitMerge, Bell, Flame, Wifi, WifiOff, LogOut, UserCircle } from 'lucide-react';
+import {
+  Activity,
+  GitMerge,
+  Bell,
+  Flame,
+  Wifi,
+  WifiOff,
+  LogOut,
+  PanelLeftOpen,
+  PanelLeftClose,
+} from 'lucide-react';
 import { useSocket } from '../../context/SocketContext.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
+import { useMachines } from '../../context/MachineContext.jsx';
 import { alertService } from '../../services/alertService.js';
 
 export function Navbar() {
@@ -10,6 +21,7 @@ export function Navbar() {
   const navigate = useNavigate();
   const { isConnected } = useSocket();
   const { user, logout, isAuthenticated } = useAuth();
+  const { devices, runningDevices, isMenuOpen, toggleMenu } = useMachines();
 
   const handleTriggerSpike = async () => {
     try {
@@ -31,21 +43,46 @@ export function Navbar() {
   ];
 
   return (
-    <header className="border-b border-slate-800 bg-slate-900/90 backdrop-blur sticky top-0 z-50 px-6 py-3">
-      <div className="max-w-7xl mx-auto flex items-center justify-between">
-        {/* Brand */}
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center shadow-lg shadow-blue-500/20">
-            <Activity className="w-5 h-5 text-white" />
-          </div>
-          <div>
-            <span className="font-bold text-lg text-white tracking-tight">
-              Nexus<span className="text-blue-400">Flow</span>
+    <header className="h-[61px] border-b border-slate-800 bg-slate-900/95 backdrop-blur sticky top-0 z-50 px-4 sm:px-6 flex items-center">
+      <div className="max-w-7xl w-full mx-auto flex items-center justify-between gap-2">
+        {/* Left: Slide Menu Trigger + Brand */}
+        <div className="flex items-center gap-2.5 sm:gap-3">
+          <button
+            type="button"
+            onClick={toggleMenu}
+            aria-expanded={isMenuOpen}
+            aria-label="Toggle machines slide menu"
+            title={isMenuOpen ? 'Close Machines Control Menu' : 'Slide open Machines Control Menu'}
+            className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-xs font-bold transition-all cursor-pointer active:scale-95 ${
+              isMenuOpen
+                ? 'bg-blue-600/20 text-blue-300 border-blue-500/60 shadow-sm shadow-blue-950/50'
+                : 'bg-slate-800/80 hover:bg-slate-800 text-slate-200 hover:text-white border-slate-700/80'
+            }`}
+          >
+            {isMenuOpen ? (
+              <PanelLeftClose className="w-4 h-4 text-blue-400" />
+            ) : (
+              <PanelLeftOpen className="w-4 h-4 text-blue-400" />
+            )}
+            <span className="hidden sm:inline">Machines</span>
+            <span className="px-1.5 py-0.5 rounded-full text-[10px] font-mono bg-emerald-950/90 text-emerald-400 border border-emerald-800/70">
+              {runningDevices.length}/{devices.length}
             </span>
-            <span className="hidden sm:inline-block ml-2 text-xs font-mono text-slate-400 bg-slate-800 px-2 py-0.5 rounded border border-slate-700">
-              IoT Automation
-            </span>
-          </div>
+          </button>
+
+          <Link to="/" className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-lg bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center shadow-lg shadow-blue-500/20">
+              <Activity className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <span className="font-bold text-lg text-white tracking-tight">
+                Nexus<span className="text-blue-400">Flow</span>
+              </span>
+              <span className="hidden lg:inline-block ml-2 text-xs font-mono text-slate-400 bg-slate-800 px-2 py-0.5 rounded border border-slate-700">
+                IoT Automation
+              </span>
+            </div>
+          </Link>
         </div>
 
         {/* Navigation */}

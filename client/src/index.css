@@ -49,3 +49,22 @@
   animation: alertGlow 1s ease-out;
   border-color: #ef4444 !important;
 }
+
+/* Custom thin dark scrollbar for slideable machine drawer */
+.nexus-scrollbar::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+.nexus-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.nexus-scrollbar::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 9999px;
+}
+
+.nexus-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
