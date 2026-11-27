@@ -1,18 +1,20 @@
 import React, { useState } from 'react';
-import { BellRing, ShieldAlert, Clock, Activity, Zap, Flame } from 'lucide-react';
+import { BellRing, ShieldAlert, Clock, Activity, Zap, Flame, Volume2, VolumeX } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { alertService } from '../../services/alertService.js';
 import { useMachines } from '../../context/MachineContext.jsx';
+import { unlockAlertAudio } from '../../utils/alertSound.js';
 
 export function AlertFeed({ alerts = [], runningDevices = [], activeDeviceId, onSelectDevice }) {
   const [activeTab, setActiveTab] = useState('running'); // 'running' | 'alerts'
   const [isSpiking, setIsSpiking] = useState(false);
-  const { notifyToast } = useMachines();
+  const { notifyToast, soundEnabled, toggleSound, isAlertRinging } = useMachines();
 
   const handleTriggerSpike = async (e) => {
     e.stopPropagation();
     const target = activeDeviceId || 'TURBINE_001';
     setIsSpiking(true);
+    await unlockAlertAudio();
     try {
       await alertService.triggerTestSpike(target, 93.5);
       notifyToast({
@@ -28,21 +30,45 @@ export function AlertFeed({ alerts = [], runningDevices = [], activeDeviceId, on
   };
 
   return (
-    <div className="bg-gradient-to-b from-slate-900 to-slate-900/90 border border-slate-800 rounded-2xl p-4 shadow-xl flex flex-col lg:sticky lg:top-[82px] lg:max-h-[calc(100vh-106px)]">
+    <div
+      className={`bg-gradient-to-b from-slate-900 to-slate-900/90 border rounded-2xl p-4 shadow-xl flex flex-col lg:sticky lg:top-[82px] lg:max-h-[calc(100vh-106px)] transition-all duration-300 ${
+        isAlertRinging ? 'border-red-500/80 ring-1 ring-red-500/40' : 'border-slate-800'
+      }`}
+    >
       {/* Header */}
-      <div className="flex items-center justify-between mb-3 pb-2.5 border-b border-slate-800">
-        <div className="flex items-center gap-2">
-          <BellRing className="w-4 h-4 text-red-400" />
-          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">
+      <div className="flex items-center justify-between mb-3 pb-2.5 border-b border-slate-800 gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <BellRing
+            className={`w-4 h-4 shrink-0 ${
+              isAlertRinging ? 'text-red-400 animate-bounce' : 'text-red-400'
+            }`}
+          />
+          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300 truncate">
             Live Stream &amp; Alerts
           </h3>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            type="button"
+            onClick={toggleSound}
+            title={soundEnabled ? 'Mute alert beep sound' : 'Enable alert beep sound'}
+            className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold border transition-all cursor-pointer ${
+              soundEnabled
+                ? isAlertRinging
+                  ? 'bg-red-950/90 text-red-300 border-red-500/70 animate-pulse'
+                  : 'bg-blue-950/80 text-blue-300 border-blue-800/70 hover:bg-blue-900/80'
+                : 'bg-slate-800/80 text-slate-400 border-slate-700 hover:text-white'
+            }`}
+          >
+            {soundEnabled ? <Volume2 className="w-3 h-3" /> : <VolumeX className="w-3 h-3" />}
+            <span>{soundEnabled ? 'Beep ON' : 'Muted'}</span>
+          </button>
+
           <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-950/80 text-emerald-400 border border-emerald-800/70 flex items-center gap-1">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
             {runningDevices.length} ON
           </span>
-          <Link to="/history" className="text-[11px] text-blue-400 hover:text-blue-300 font-medium">
+          <Link to="/history" className="text-[11px] text-blue-400 hover:text-blue-300 font-medium ml-0.5">
             History &rarr;
           </Link>
         </div>

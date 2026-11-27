@@ -10,23 +10,37 @@ import {
   LogOut,
   PanelLeftOpen,
   PanelLeftClose,
+  Volume2,
+  VolumeX,
 } from 'lucide-react';
 import { useSocket } from '../../context/SocketContext.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useMachines } from '../../context/MachineContext.jsx';
 import { alertService } from '../../services/alertService.js';
+import { unlockAlertAudio } from '../../utils/alertSound.js';
 
 export function Navbar() {
   const location = useLocation();
   const navigate = useNavigate();
   const { isConnected } = useSocket();
   const { user, logout, isAuthenticated } = useAuth();
-  const { devices, runningDevices, selectedDeviceId, isMenuOpen, toggleMenu, notifyToast } = useMachines();
+  const {
+    devices,
+    runningDevices,
+    selectedDeviceId,
+    isMenuOpen,
+    toggleMenu,
+    notifyToast,
+    soundEnabled,
+    toggleSound,
+    isAlertRinging,
+  } = useMachines();
   const [spiking, setSpiking] = useState(false);
 
   const handleTriggerSpike = async () => {
     const target = selectedDeviceId || 'TURBINE_001';
     setSpiking(true);
+    await unlockAlertAudio();
     try {
       await alertService.triggerTestSpike(target, 91.5);
       notifyToast({
@@ -123,7 +137,29 @@ export function Navbar() {
         </nav>
 
         {/* Right Actions & Status */}
-        <div className="flex items-center gap-2.5 sm:gap-3">
+        <div className="flex items-center gap-2 sm:gap-2.5">
+          {/* Alert Beep Sound Toggle */}
+          <button
+            type="button"
+            onClick={toggleSound}
+            title={soundEnabled ? 'Alert beep ON — click to mute' : 'Alert beep muted — click to enable'}
+            aria-label={soundEnabled ? 'Mute alert beep sound' : 'Enable alert beep sound'}
+            className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border font-medium transition-all cursor-pointer active:scale-95 ${
+              soundEnabled
+                ? isAlertRinging
+                  ? 'bg-red-950/90 text-red-200 border-red-500/80 animate-pulse shadow-sm shadow-red-900/50'
+                  : 'bg-slate-800/80 hover:bg-slate-800 text-blue-300 border-blue-800/60'
+                : 'bg-slate-900 text-slate-400 hover:text-white border-slate-700/80'
+            }`}
+          >
+            {soundEnabled ? (
+              <Volume2 className={`w-3.5 h-3.5 ${isAlertRinging ? 'text-red-400' : 'text-blue-400'}`} />
+            ) : (
+              <VolumeX className="w-3.5 h-3.5 text-slate-500" />
+            )}
+            <span className="hidden lg:inline">{soundEnabled ? 'Sound' : 'Muted'}</span>
+          </button>
+
           {/* Quick Demo Spike Trigger */}
           <button
             onClick={handleTriggerSpike}

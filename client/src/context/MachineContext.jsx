@@ -1,6 +1,8 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSocket } from './SocketContext.jsx';
 import { telemetryService } from '../services/telemetryService.js';
+import { alertService } from '../services/alertService.js';
+import { playAlertBeep, playConfirmBeep } from '../utils/alertSound.js';
 
 const MachineContext = createContext(null);
 
@@ -20,6 +22,22 @@ export function MachineProvider({ children }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isMenuPinned, setIsMenuPinned] = useState(false);
   const [toasts, setToasts] = useState([]);
+  const [alerts, setAlerts] = useState([]);
+  const [alertsLoading, setAlertsLoading] = useState(false);
+  const [isAlertRinging, setIsAlertRinging] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    return localStorage.getItem('nexusflow_alert_sound') !== 'false';
+  });
+  const soundEnabledRef = useRef(soundEnabled);
+  const ringTimerRef = useRef(null);
+
+  useEffect(() => {
+    soundEnabledRef.current = soundEnabled;
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('nexusflow_alert_sound', String(soundEnabled));
+    }
+  }, [soundEnabled]);
 
   const dismissToast = useCallback((id) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
@@ -33,6 +51,22 @@ export function MachineProvider({ children }) {
     }, 3400);
   }, []);
 
+  const toggleSound = useCallback(async () => {
+    const next = !soundEnabledRef.current;
+    soundEnabledRef.current = next;
+    setSoundEnabled(next);
+    if (next) {
+      await playConfirmBeep();
+    }
+    notifyToast({
+      title: next ? 'Alert Beep Sound Enabled' : 'Alert Beep Muted',
+      message: next
+        ? 'Audible beep will sound whenever an anomaly alert triggers.'
+        : 'Visual alerts continue silently without audio.',
+      type: next ? 'success' : 'info',
+    });
+  }, [notifyToast]);
+
   const loadDevices = useCallback(async () => {
     try {
       const { devices: devList, capacity: cap } = await telemetryService.getDevicesWithCapacity();
@@ -43,12 +77,25 @@ export function MachineProvider({ children }) {
     }
   }, []);
 
-  // Load initial devices & refresh on socket reconnect
+  const refreshAlerts = useCallback(async (limit = 100) => {
+    setAlertsLoading(true);
+    try {
+      const list = await alertService.getAlerts(limit);
+      setAlerts(list);
+    } catch (err) {
+      console.warn('[MachineContext] Failed to fetch alerts:', err.message);
+    } finally {
+      setAlertsLoading(false);
+    }
+  }, []);
+
+  // Load initial devices & alerts, refreshing on socket reconnect
   useEffect(() => {
     loadDevices();
-  }, [loadDevices, isConnected]);
+    refreshAlerts(100);
+  }, [loadDevices, refreshAlerts, isConnected]);
 
-  // Listen to real-time Socket.IO telemetry & device power updates
+  // Listen to real-time Socket.IO telemetry, device status, and alerts (single centralized subscription)
   useEffect(() => {
     if (!socket) return;
 
@@ -90,14 +137,37 @@ export function MachineProvider({ children }) {
       if (cap) setCapacity(cap);
     };
 
+    const handleNewAlert = (newAlert) => {
+      if (!newAlert) return;
+      const alertKey = newAlert.id || newAlert._id;
+
+      setAlerts((prev) => {
+        if (alertKey && prev.some((a) => (a.id || a._id) === alertKey)) {
+          return prev;
+        }
+        return [newAlert, ...prev].slice(0, 200);
+      });
+
+      setIsAlertRinging(true);
+      if (ringTimerRef.current) clearTimeout(ringTimerRef.current);
+      ringTimerRef.current = setTimeout(() => setIsAlertRinging(false), 1200);
+
+      if (soundEnabledRef.current) {
+        playAlertBeep();
+      }
+    };
+
     socket.on('telemetry:update', handleUpdate);
     socket.on('device:status', handleDeviceStatus);
     socket.on('capacity:update', handleCapacityUpdate);
+    socket.on('alert:new', handleNewAlert);
 
     return () => {
       socket.off('telemetry:update', handleUpdate);
       socket.off('device:status', handleDeviceStatus);
       socket.off('capacity:update', handleCapacityUpdate);
+      socket.off('alert:new', handleNewAlert);
+      if (ringTimerRef.current) clearTimeout(ringTimerRef.current);
     };
   }, [socket]);
 
@@ -264,6 +334,12 @@ export function MachineProvider({ children }) {
     toasts,
     notifyToast,
     dismissToast,
+    alerts,
+    alertsLoading,
+    refreshAlerts,
+    soundEnabled,
+    toggleSound,
+    isAlertRinging,
   };
 
   return <MachineContext.Provider value={value}>{children}</MachineContext.Provider>;

@@ -1,7 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { alertService } from '../services/alertService.js';
-import { useSocket } from '../context/SocketContext.jsx';
 import { useMachines } from '../context/MachineContext.jsx';
 import {
   Bell,
@@ -17,39 +15,12 @@ import {
 } from 'lucide-react';
 
 export function HistoryPage() {
-  const [alerts, setAlerts] = useState([]);
-  const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [deviceFilter, setDeviceFilter] = useState('ALL');
-  const { socket } = useSocket();
-  const { setSelectedDeviceId, notifyToast } = useMachines();
+  const { alerts, alertsLoading: loading, refreshAlerts, setSelectedDeviceId, notifyToast } = useMachines();
   const navigate = useNavigate();
 
-  const fetchAlerts = async () => {
-    setLoading(true);
-    try {
-      const data = await alertService.getAlerts(100);
-      setAlerts(data);
-    } catch (err) {
-      console.error('Failed to load alert history:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchAlerts();
-  }, []);
-
-  // Listen to new alerts real-time
-  useEffect(() => {
-    if (!socket) return;
-    const handleNew = (alt) => {
-      setAlerts((prev) => [alt, ...prev]);
-    };
-    socket.on('alert:new', handleNew);
-    return () => socket.off('alert:new', handleNew);
-  }, [socket]);
+  const fetchAlerts = () => refreshAlerts(100);
 
   const uniqueDevices = useMemo(() => {
     return Array.from(new Set(alerts.map((a) => a.deviceId).filter(Boolean)));

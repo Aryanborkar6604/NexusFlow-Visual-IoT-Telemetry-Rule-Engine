@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useTelemetry } from '../hooks/useTelemetry.js';
 import { useSocket } from '../context/SocketContext.jsx';
 import { useMachines } from '../context/MachineContext.jsx';
 import { alertService } from '../services/alertService.js';
+import { unlockAlertAudio } from '../utils/alertSound.js';
 import { DeviceList } from '../components/dashboard/DeviceList.jsx';
 import { LiveChart } from '../components/dashboard/LiveChart.jsx';
 import { AlertFeed } from '../components/dashboard/AlertFeed.jsx';
@@ -20,8 +21,7 @@ import {
 } from 'lucide-react';
 
 export function DashboardPage() {
-  const { selectedDeviceId, setSelectedDeviceId, toggleMenu, isMenuOpen, notifyToast } = useMachines();
-  const [alerts, setAlerts] = useState([]);
+  const { selectedDeviceId, setSelectedDeviceId, toggleMenu, isMenuOpen, notifyToast, alerts } = useMachines();
   const [isSpiking, setIsSpiking] = useState(false);
 
   const {
@@ -37,7 +37,7 @@ export function DashboardPage() {
     togglePower,
     bulkTogglePower,
   } = useTelemetry(selectedDeviceId, 30);
-  const { socket, isConnected } = useSocket();
+  const { isConnected } = useSocket();
 
   const selectedDevice = devices.find((d) => d.deviceId === selectedDeviceId);
   const isSelectedOnline = selectedDevice ? selectedDevice.status === 'online' : true;
@@ -48,6 +48,7 @@ export function DashboardPage() {
 
   const handleDemoSpike = async () => {
     setIsSpiking(true);
+    await unlockAlertAudio();
     try {
       await alertService.triggerTestSpike(selectedDeviceId, 94.2);
       notifyToast({
@@ -61,34 +62,6 @@ export function DashboardPage() {
       setTimeout(() => setIsSpiking(false), 1200);
     }
   };
-
-  // Load initial alerts
-  useEffect(() => {
-    async function loadAlerts() {
-      try {
-        const list = await alertService.getAlerts(20);
-        setAlerts(list);
-      } catch (err) {
-        console.warn('Failed to fetch initial alerts:', err.message);
-      }
-    }
-    loadAlerts();
-  }, []);
-
-  // Listen to new live alerts via Socket.IO
-  useEffect(() => {
-    if (!socket) return;
-
-    const handleNewAlert = (newAlert) => {
-      setAlerts((prev) => [newAlert, ...prev]);
-    };
-
-    socket.on('alert:new', handleNewAlert);
-
-    return () => {
-      socket.off('alert:new', handleNewAlert);
-    };
-  }, [socket]);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
