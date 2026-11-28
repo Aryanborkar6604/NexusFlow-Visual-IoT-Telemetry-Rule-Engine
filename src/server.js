@@ -116,9 +116,19 @@ export async function createServer() {
     row.meta.ownerId = ownerId;
     await getDb().collection('telemetry').insertOne(row);
     publish({ type: 'telemetry', ownerId, data: { sensorId: row.meta.sensorId, deviceId: row.meta.deviceId, timestamp: row.timestamp, measurements: row.measurements } });
-    const rules = await getDb().collection('rules').find({ ownerId: new ObjectId(ownerId), enabled: true }).toArray();
+    const rules = await getDb().collection('rules').find({ ownerId: new ObjectId(ownerId), enabled: true }).toArray().catch((error) => { console.error('Could not load rules for telemetry point', error); return []; });
     await Promise.all(rules.map((rule) => runRule(rule, ownerId, row).catch((error) => console.error(`Rule ${rule._id} failed for sensor ${row.meta.sensorId}`, error))));
     return row;
+  };
+
+  const ingestBatch = async (ownerId, inputs) => {
+    const rows = inputs.map(telemetryBody);
+    rows.forEach((row) => { row.meta.ownerId = ownerId; });
+    await getDb().collection('telemetry').insertMany(rows, { ordered: true });
+    rows.forEach((row) => publish({ type: 'telemetry', ownerId, data: { sensorId: row.meta.sensorId, deviceId: row.meta.deviceId, timestamp: row.timestamp, measurements: row.measurements } }));
+    const rules = await getDb().collection('rules').find({ ownerId: new ObjectId(ownerId), enabled: true }).toArray().catch((error) => { console.error('Could not load rules for telemetry batch', error); return []; });
+    await Promise.all(rows.flatMap((row) => rules.map((rule) => runRule(rule, ownerId, row).catch((error) => console.error(`Rule ${rule._id} failed for sensor ${row.meta.sensorId}`, error)))));
+    return rows;
   };
 
   app.disable('x-powered-by');
@@ -178,7 +188,7 @@ export async function createServer() {
       const rows = Array.isArray(req.body) ? req.body : [req.body];
       if (!rows.length || rows.length > config.maxTelemetryBatch) return res.status(413).json({ error: `Send between 1 and ${config.maxTelemetryBatch} telemetry points` });
       for (const row of rows) telemetryBody(row);
-      for (const row of rows) await ingestPoint(req.user.id, row);
+      await ingestBatch(req.user.id, rows);
       return res.status(202).json({ accepted: rows.length });
     } catch (error) {
       if (error instanceof TelemetryValidationError) return res.status(400).json({ error: error.message });
@@ -197,7 +207,8 @@ export async function createServer() {
   });
   app.get('/api/alerts', async (req, res, next) => {
     try {
-      const limit = Math.min(500, Math.max(1, Number(req.query.limit ?? 100)));
+      const limit = Number(req.query.limit ?? 100);
+      if (!Number.isInteger(limit) || limit < 1 || limit > 500) return res.status(400).json({ error: 'limit must be between 1 and 500' });
       const alerts = await getDb().collection('alerts').find({ ownerId: new ObjectId(req.user.id) }).sort({ timestamp: -1 }).limit(limit).toArray();
       return res.json(alerts.map(({ ownerId, ...alert }) => ({ ...alert, _id: alert._id.toString(), ruleId: String(alert.ruleId) })));
     } catch (error) { return next(error); }
@@ -214,6 +225,7 @@ export async function createServer() {
     if (clients.size >= config.maxWebSocketClients) { socket.close(1013, 'Server is at capacity'); return; }
     socket.userId = user.id;
     clients.add(socket);
+    socket.authExpiry = setTimeout(() => socket.close(1008, 'Authentication expired'), Math.max(0, user.expiresAt - Date.now()));
     socket.send(JSON.stringify({ type: 'connected' }));
     socket.on('message', async (raw) => {
       try {
@@ -228,7 +240,7 @@ export async function createServer() {
         socket.send(JSON.stringify({ type: 'accepted', sensorId: row.meta.sensorId }));
       } catch (error) { socket.send(JSON.stringify({ type: 'error', message: error.message })); }
     });
-    socket.on('close', () => clients.delete(socket));
+    socket.on('close', () => { clearTimeout(socket.authExpiry); clients.delete(socket); });
   });
 
   app.use((error, _req, res, _next) => {

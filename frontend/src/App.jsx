@@ -62,6 +62,7 @@ export default function App() {
     try { return JSON.parse(localStorage.getItem('nexusflow.rule.v1'))?.graph?.edges ?? initialEdges; } catch { return initialEdges; }
   });
   const [active, setActive] = useState('condition-1');
+  const [activeView, setActiveViewState] = useState('builder');
   const [saved, setSaved] = useState(() => localStorage.getItem('nexusflow.rule.v1') ? 'Draft restored' : 'Sample rule');
   const [toast, setToast] = useState('');
   const [preview, setPreview] = useState(null);
@@ -78,6 +79,37 @@ export default function App() {
   const [connectionError, setConnectionError] = useState('');
   const [connectionBusy, setConnectionBusy] = useState(false);
   const [connectionForm, setConnectionForm] = useState({ url: apiBase, email: '', password: '' });
+  const [remoteRules, setRemoteRules] = useState([]);
+  const [hasLoadedRules, setHasLoadedRules] = useState(false);
+  const [telemetryPoints, setTelemetryPoints] = useState([]);
+  const [alertHistory, setAlertHistory] = useState([]);
+  const [monitorLoading, setMonitorLoading] = useState(false);
+  const [monitorRefresh, setMonitorRefresh] = useState(0);
+  const [monitorError, setMonitorError] = useState('');
+  const setActiveView = (view) => {
+    setActiveViewState(view);
+    if (view === 'monitor') setMonitorRefresh((value) => value + 1);
+  };
+  useEffect(() => {
+    if (!token || hasLoadedRules) return undefined;
+    let cancelled = false;
+    apiRequest(apiBase, '/api/rules', { token }).then((rules) => {
+      if (cancelled) return;
+      setRemoteRules(rules);
+      const current = rules.find((rule) => rule._id === remoteRuleId) ?? rules.find((rule) => rule.name === ruleName) ?? rules[0];
+      if (current) {
+        const graph = hydrateGraph(current.graph);
+        setRemoteRuleId(current._id); localStorage.setItem('nexusflow.api.ruleId', current._id);
+        localStorage.setItem('nexusflow.rule.v1', JSON.stringify({ name: current.name, enabled: current.enabled, graph }));
+        setRuleName(current.name); setNodes(graph.nodes); setEdges(graph.edges); setSaved('Loaded from server');
+        setActive(graph.nodes.find((node) => node.type === 'condition')?.id ?? graph.nodes[0]?.id ?? '');
+      }
+      setHasLoadedRules(true);
+    }).catch((error) => {
+      if (!cancelled) { setHasLoadedRules(true); setToast(`Could not load rules: ${error.message}`); }
+    });
+    return () => { cancelled = true; };
+  }, [token, apiBase, hasLoadedRules]);
   const nodeTypesMemo = useMemo(() => nodeTypes, []);
   const handleNodesChange = useCallback((changes) => {
     onNodesChange(changes);
@@ -119,9 +151,11 @@ export default function App() {
         if (Number.isFinite(reading)) {
           const unit = liveField === 'temperature' ? '°C' : liveField === 'pressure' ? 'kPa' : liveField === 'vibration' ? 'mm/s' : '';
           setNodes((all) => all.map((node) => node.id === sensor?.id ? { ...node, data: { ...node.data, sampleValue: reading, value: `${reading} ${unit}`.trim(), liveAt: message.data.timestamp } : node));
+          setTelemetryPoints((all) => [...all.filter((point) => point.timestamp !== message.data.timestamp), { timestamp: message.data.timestamp, value: reading }].slice(-100));
         }
       }
       if (message.type === 'alert') {
+        setAlertHistory((all) => [message.data, ...all].slice(0, 30));
         setToast(`Alert received: ${message.data?.message ?? 'Rule action triggered'}`);
         window.setTimeout(() => setToast(''), 4000);
       }
@@ -130,6 +164,29 @@ export default function App() {
     socket.onclose = () => setConnectionStatus('offline');
     return () => { socket.close(); };
   }, [token, apiBase, liveSensorId, liveField]);
+  useEffect(() => {
+    if (activeView !== 'monitor' || !token) return undefined;
+    if (!liveSensorId) { setTelemetryPoints([]); setAlertHistory([]); setMonitorError('This rule has no configured sensor source.'); return undefined; }
+    let cancelled = false;
+    setMonitorLoading(true); setMonitorError(''); setTelemetryPoints([]); setAlertHistory([]);
+    Promise.all([
+      apiRequest(apiBase, `/api/telemetry/latest?sensorId=${encodeURIComponent(liveSensorId)}&limit=100`, { token }),
+      apiRequest(apiBase, '/api/alerts?limit=30', { token }),
+    ]).then(([points, alerts]) => {
+      if (cancelled) return;
+      const history = points.map((point) => ({ timestamp: point.timestamp, value: Number(point.measurements?.[liveField]) })).filter((point) => Number.isFinite(point.value)).reverse();
+      setTelemetryPoints((current) => {
+        const merged = new Map([...history, ...current].map((point) => [point.timestamp, point]));
+        return [...merged.values()].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)).slice(-100);
+      });
+      setAlertHistory((current) => {
+        const merged = new Map([...alerts, ...current].map((alert, index) => [alert._id ?? `${alert.timestamp}-${index}`, alert]));
+        return [...merged.values()].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)).slice(0, 30);
+      });
+    }).catch((error) => { if (!cancelled) setMonitorError(error.message); })
+      .finally(() => { if (!cancelled) setMonitorLoading(false); });
+    return () => { cancelled = true; };
+  }, [activeView, token, apiBase, liveSensorId, liveField, monitorRefresh]);
   const connectAccount = async (event) => {
     event.preventDefault();
     setConnectionBusy(true); setConnectionError('');
@@ -141,15 +198,7 @@ export default function App() {
       localStorage.setItem('nexusflow.api.user', JSON.stringify(session.user));
       localStorage.removeItem('nexusflow.api.ruleId'); setRemoteRuleId('');
       setApiBase(cleanBase); setToken(session.token); setAccount(session.user); setConnectionForm((form) => ({ ...form, password: '' }));
-      const savedRules = await apiRequest(cleanBase, '/api/rules', { token: session.token });
-      const matched = savedRules.find((rule) => rule.name === ruleName) ?? savedRules[0];
-      if (matched) {
-        setRemoteRuleId(matched._id); localStorage.setItem('nexusflow.api.ruleId', matched._id);
-        const graph = hydrateGraph(matched.graph);
-        setRuleName(matched.name); setNodes(graph.nodes); setEdges(graph.edges); setSaved('Loaded from server');
-      } else {
-        setRemoteRuleId(''); localStorage.removeItem('nexusflow.api.ruleId');
-      }
+      setRemoteRules([]); setHasLoadedRules(false);
       setConnectionStatus('connecting'); setConnectionOpen(false); setToast(`Connected as ${session.user.email}`); window.setTimeout(() => setToast(''), 2500);
     } catch (error) { setConnectionError(error.message); }
     finally { setConnectionBusy(false); }
@@ -157,6 +206,7 @@ export default function App() {
   const disconnectAccount = () => {
     localStorage.removeItem('nexusflow.api.token'); localStorage.removeItem('nexusflow.api.user'); localStorage.removeItem('nexusflow.api.ruleId');
     setToken(''); setAccount(null); setRemoteRuleId(''); setConnectionStatus('offline'); setConnectionOpen(false);
+    setRemoteRules([]); setHasLoadedRules(false);
   };
   const sendTelemetry = async () => {
     if (!token) { setConnectionOpen(true); setConnectionError('Sign in to send telemetry to the API.'); return; }
@@ -168,6 +218,38 @@ export default function App() {
       setToast(`Telemetry accepted · ${result.accepted} point`); window.setTimeout(() => setToast(''), 3000);
     } catch (error) { setToast(`Telemetry error: ${error.message}`); window.setTimeout(() => setToast(''), 4000); }
   };
+  const chooseRule = (rule) => {
+    if (['Unsaved changes', 'Saved locally · server error'].includes(saved)) { setToast('Save this rule before switching'); window.setTimeout(() => setToast(''), 2500); return; }
+    const graph = hydrateGraph(rule.graph);
+    setRemoteRuleId(rule._id); localStorage.setItem('nexusflow.api.ruleId', rule._id);
+    localStorage.setItem('nexusflow.rule.v1', JSON.stringify({ name: rule.name, enabled: rule.enabled, graph }));
+    setRuleName(rule.name); setNodes(graph.nodes); setEdges(graph.edges); setSaved('Loaded from server'); setActiveView('builder');
+    setPreview(null);
+    setActive(graph.nodes.find((node) => node.type === 'condition')?.id ?? graph.nodes[0]?.id ?? '');
+  };
+  const createRule = () => {
+    if (!token) { setConnectionOpen(true); setConnectionError('Sign in to create and manage multiple server rules.'); return; }
+    if (['Unsaved changes', 'Saved locally · server error'].includes(saved)) { setToast('Save this rule before creating another'); window.setTimeout(() => setToast(''), 2500); return; }
+    const nodesCopy = JSON.parse(JSON.stringify(initialNodes));
+    const edgesCopy = JSON.parse(JSON.stringify(initialEdges));
+    setRemoteRuleId(''); localStorage.removeItem('nexusflow.api.ruleId');
+    setRuleName('New automation'); setNodes(nodesCopy); setEdges(edgesCopy); setActive('condition-1'); setPreview(null); setSaved('Unsaved changes'); setActiveView('builder');
+  };
+  const deleteRule = async (event, rule) => {
+    event.stopPropagation();
+    if (rule._id === remoteRuleId && ['Unsaved changes', 'Saved locally · server error'].includes(saved)) { setToast('Save or discard your changes before deleting'); window.setTimeout(() => setToast(''), 2500); return; }
+    if (!token || !window.confirm(`Delete “${rule.name}”? This cannot be undone.`)) return;
+    try {
+      await apiRequest(apiBase, `/api/rules/${encodeURIComponent(rule._id)}`, { token, method: 'DELETE' });
+      const remaining = remoteRules.filter((item) => item._id !== rule._id);
+      setRemoteRules(remaining);
+      if (rule._id === remoteRuleId) {
+        localStorage.removeItem('nexusflow.api.ruleId'); setRemoteRuleId('');
+        if (remaining[0]) chooseRule(remaining[0]); else createRule();
+      }
+      setToast('Rule deleted'); window.setTimeout(() => setToast(''), 2400);
+    } catch (error) { setToast(`Could not delete rule: ${error.message}`); window.setTimeout(() => setToast(''), 4000); }
+  };
   const selected = nodes.find((node) => node.id === active) ?? nodes[0];
   const updateSelected = (field, value) => {
     setSaved('Unsaved changes');
@@ -178,7 +260,11 @@ export default function App() {
         if (value === 'sms') delete data.webhookUrl;
         if (value === 'webhook') delete data.phone;
       }
-      if (field === 'sampleValue') data.value = `${value} °C`;
+      if (node.type === 'sensor' && (field === 'sampleValue' || field === 'field')) {
+        const sampleField = field === 'field' ? value : data.field;
+        const unit = sampleField === 'temperature' ? '°C' : sampleField === 'pressure' ? 'kPa' : sampleField === 'vibration' ? 'mm/s' : '';
+        data.value = `${field === 'sampleValue' ? value : data.sampleValue ?? 72.4} ${unit}`.trim();
+      }
       if (node.type === 'condition' && (field === 'value' || field === 'operator' || field === 'field')) data.detail = `${data.field ?? 'value'} ${({ gt: '>', gte: '≥', lt: '<', lte: '≤', eq: '=' }[data.operator] ?? '>')} ${data.value ?? 80}`;
       if (field === 'window') data.detail = `Window · ${value} samples`;
       if (node.type === 'mathOperation' && ['field', 'operation', 'operand'].includes(field)) data.detail = `${data.field ?? 'value'} ${({ add: '+', subtract: '−', multiply: '×', divide: '÷', modulo: '%' }[data.operation] ?? '+')} ${data.operand ?? 1}`;
@@ -210,7 +296,7 @@ export default function App() {
       const path = remoteRuleId ? `/api/rules/${encodeURIComponent(remoteRuleId)}` : '/api/rules';
       const result = await apiRequest(apiBase, path, { token, method: remoteRuleId ? 'PUT' : 'POST', body: JSON.stringify(rule) });
       const id = result._id ?? remoteRuleId;
-      setRemoteRuleId(id); localStorage.setItem('nexusflow.api.ruleId', id); setSaved('Saved to server'); setToast('Rule saved to NexusFlow');
+      setRemoteRuleId(id); localStorage.setItem('nexusflow.api.ruleId', id); setRemoteRules((all) => [result, ...all.filter((item) => item._id !== id)]); setSaved('Saved to server'); setToast('Rule saved to NexusFlow');
     } catch (error) { setSaved('Saved locally · server error'); setToast(`Local draft saved; API error: ${error.message}`); }
     window.setTimeout(() => setToast(''), 4000);
   };
@@ -260,6 +346,14 @@ export default function App() {
     const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = 'nexusflow-rule.json'; link.click(); URL.revokeObjectURL(link.href);
     setToast('Rule graph exported as JSON'); window.setTimeout(() => setToast(''), 2400);
   };
+  const chartData = telemetryPoints.filter((point) => Number.isFinite(point.value)).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)).slice(-50);
+  const chartMin = chartData.length ? Math.min(...chartData.map((point) => point.value)) : 0;
+  const chartMax = chartData.length ? Math.max(...chartData.map((point) => point.value)) : 1;
+  const chartCoordinates = chartData.map((point, index) => {
+    const x = chartData.length < 2 ? 300 : (index / (chartData.length - 1)) * 600;
+    const y = 142 - ((point.value - chartMin) / (chartMax - chartMin || 1)) * 112;
+    return `${x},${y}`;
+  }).join(' ');
 
   return <div className="app-shell">
     <header className="topbar">
@@ -267,16 +361,17 @@ export default function App() {
       <div className="top-center"><span className="crumb-muted">Automation</span><span className="crumb-slash">/</span><span>{ruleName}</span><span className="unsaved-dot" title={saved}/></div>
       <div className="top-actions"><span className="save-state">✓ {saved}</span><button className={`connect-button ${token ? 'connected' : ''}`} onClick={() => { setConnectionForm((form) => ({ ...form, url: apiBase })); setConnectionError(''); setConnectionOpen(true); }}><i/>{token ? account?.email ?? 'Connected' : 'Connect API'}</button>{token && <button className="disconnect-button" onClick={disconnectAccount}>Disconnect</button>}<button className="publish-button" onClick={save}>Save rule <span>↗</span></button></div>
     </header>
-    <div className="page-tabs"><button className="tab active">◈ <span>Rule builder</span></button><button className="tab">▥ <span>Live monitor</span></button><div className="tabs-right"><span className={`status-pill ${connectionStatus}`}><i/> {connectionStatus === 'connected' ? 'Live stream connected' : connectionStatus === 'connecting' ? 'Connecting to API…' : 'Local preview mode'}</span><button className="icon-button">⋯</button></div></div>
+    <div className="page-tabs"><button className={`tab ${activeView === 'builder' ? 'active' : ''}`} onClick={() => setActiveView('builder')}>◈ <span>Rule builder</span></button><button className={`tab ${activeView === 'monitor' ? 'active' : ''}`} onClick={() => setActiveView('monitor')}>▥ <span>Live monitor</span></button><div className="tabs-right"><span className={`status-pill ${connectionStatus}`}><i/> {connectionStatus === 'connected' ? 'Live stream connected' : connectionStatus === 'connecting' ? 'Connecting to API…' : 'Local preview mode'}</span><button className="icon-button">⋯</button></div></div>
     <main className="workspace">
       <aside className="sidebar">
         <div className="side-top"><span className="section-label">AUTOMATIONS</span><button className="tiny-plus">+</button></div>
-        <button className="side-link muted">⌂ <span>Overview</span></button><button className="side-link selected-link">◈ <span>Rule builder</span><span className="side-count">3</span></button><button className="side-link muted">◷ <span>Activity log</span></button>
-        <div className="side-separator"/><div className="side-top"><span className="section-label">YOUR RULES</span><button className="tiny-plus">+</button></div>
-        <button className="rule-link current"><span className="rule-dot green"/><span>Turbine temperature<br/>guard</span><span className="rule-more">···</span></button><button className="rule-link"><span className="rule-dot amber"/><span>Vibration anomaly<br/>watch</span></button><button className="rule-link"><span className="rule-dot gray"/><span>Pressure drift<br/>monitor</span></button>
+        <button className="side-link muted" onClick={() => setActiveView('monitor')}>⌂ <span>Overview</span></button><button className={`side-link ${activeView === 'builder' ? 'selected-link' : 'muted'}`} onClick={() => setActiveView('builder')}>◈ <span>Rule builder</span><span className="side-count">{remoteRules.length || 1}</span></button><button className={`side-link ${activeView === 'monitor' ? 'selected-link' : 'muted'}`} onClick={() => setActiveView('monitor')}>◷ <span>Activity log</span></button>
+        <div className="side-separator"/><div className="side-top"><span className="section-label">YOUR RULES</span><button className="tiny-plus" aria-label="Create rule" onClick={createRule}>+</button></div>
+        {remoteRules.length ? remoteRules.map((rule) => <div className={`rule-entry ${rule._id === remoteRuleId ? 'current' : ''}`} key={rule._id}><button className="rule-link" onClick={() => chooseRule(rule)}><span className={`rule-dot ${rule.enabled ? 'green' : 'gray'}`}/><span>{rule.name}</span></button><button className="rule-delete" title="Delete rule" aria-label={`Delete ${rule.name}`} onClick={(event) => deleteRule(event, rule)}>×</button></div>) : <div className="rule-entry current"><button className="rule-link current" onClick={() => setActiveView('builder')}><span className="rule-dot green"/><span>{ruleName}</span></button></div>}
         <div className="sidebar-footer"><div className="plan-icon">⌁</div><div><b>Starter workspace</b><small>2 of 5 rules active</small></div><span className="upgrade-arrow">↗</span></div>
       </aside>
       <section className="main-area">
+        {activeView === 'builder' ? <>
         <div className="rule-heading"><div><div className="eyebrow"><span className="rule-dot green"/> ACTIVE RULE <span className="heading-divider">·</span> {saved.toUpperCase()}</div><h1><input aria-label="Rule name" className="rule-name-input" value={ruleName} onChange={(event) => { setRuleName(event.target.value); setSaved('Unsaved changes'); }}/> <button className="edit-title" aria-label="Edit rule name">✎</button></h1><p>Monitor turbine temperature and alert the shift manager when readings exceed safe limits.</p></div><div className="heading-actions"><button className="secondary-button" onClick={exportGraph}>⇩ <span>Export JSON</span></button><button className="secondary-button" onClick={runPreview}>◉ <span>Test rule</span></button><button className="primary-button" onClick={save}>Save changes <span>⌘ S</span></button></div></div>
         <div className="toolbar"><div className="toolbar-left"><span className="canvas-mode"><i/> CANVAS</span><span className="toolbar-divider"/><button className="tool-button">↶</button><button className="tool-button disabled">↷</button><span className="toolbar-divider"/><span className="zoom-label">100%</span><button className="tool-button">−</button><button className="tool-button">+</button></div><div className="toolbar-right"><span className="autosave"><i/> {saved}</span><button className="run-button" onClick={runPreview}>▶ <span>Run preview</span></button></div></div>
         <div className="canvas-layout">
@@ -300,6 +395,7 @@ export default function App() {
           </aside>
         </div>
         <div className="bottom-panel"><div className="panel-title"><span className="panel-grip">⠿</span><div><b>Node library</b><small>Drag a block onto the canvas to extend your flow</small></div></div><div className="library-items">{library.map((item) => <button key={item.type} className="library-card" onClick={() => addNode(item)}><span className={`library-icon ${item.className}`}>{item.icon}</span><span><b>{item.name}</b><small>{item.desc}</small></span><span className="add-symbol">+</span></button>)}</div></div>
+        </> : <div className="monitor-view"><div className="monitor-heading"><div><div className="eyebrow"><span className={`rule-dot ${connectionStatus === 'connected' ? 'green' : 'gray'}`}/> LIVE TELEMETRY</div><h1>Monitor</h1><p>Recent sensor readings and rule actions from your connected workspace.</p></div><button className="secondary-button" onClick={() => setActiveView('builder')}>◈ <span>Back to rule</span></button></div>{!token ? <div className="monitor-empty"><span>◌</span><h3>Connect to your NexusFlow API</h3><p>Sign in to load telemetry history and recent alert actions.</p><button className="primary-button" onClick={() => setConnectionOpen(true)}>Connect API</button></div> : <><div className="monitor-stats"><div className="monitor-stat"><span>DEVICE</span><b>{liveSensorId || 'No sensor selected'}</b></div><div className="monitor-stat"><span>MEASUREMENT</span><b>{liveField}</b></div><div className="monitor-stat"><span>LATEST READING</span><b>{chartData.length ? `${chartData.at(-1).value} ${liveField === 'temperature' ? '°C' : liveField === 'pressure' ? 'kPa' : liveField === 'vibration' ? 'mm/s' : ''}` : 'Waiting for data'}</b></div><div className="monitor-stat"><span>STREAM STATUS</span><b className={connectionStatus}>{connectionStatus === 'connected' ? 'Connected' : connectionStatus === 'connecting' ? 'Connecting' : 'Offline'}</b></div></div>{monitorError && <div className="monitor-error">{monitorError}</div>}<div className="monitor-grid"><section className="monitor-card chart-card"><div className="monitor-card-heading"><div><b>{liveSensorId} readings</b><small>Most recent {chartData.length} values · {liveField}</small></div><button className="tool-button" onClick={() => setActiveView('monitor')} title="Refresh">↻</button></div>{monitorLoading && !chartData.length ? <div className="chart-empty">Loading telemetry…</div> : chartData.length ? <><svg className="telemetry-chart" viewBox="0 0 600 170" preserveAspectRatio="none" role="img" aria-label={`${liveField} telemetry chart`}><line x1="0" y1="30" x2="600" y2="30"/><line x1="0" y1="86" x2="600" y2="86"/><line x1="0" y1="142" x2="600" y2="142"/><polyline points={chartCoordinates}/>{chartData.map((point, index) => chartData.length < 26 ? <circle key={`${point.timestamp}-${index}`} cx={chartData.length < 2 ? 300 : (index / (chartData.length - 1)) * 600} cy={142 - ((point.value - chartMin) / (chartMax - chartMin || 1)) * 112} r="2.5"/> : null)}</svg><div className="chart-axis"><span>{new Date(chartData[0].timestamp).toLocaleTimeString()}</span><span>{new Date(chartData.at(-1).timestamp).toLocaleTimeString()}</span></div></> : <div className="chart-empty">No telemetry yet. Select the sensor node and send a live sample.</div>}</section><section className="monitor-card alerts-card"><div className="monitor-card-heading"><div><b>Recent rule actions</b><small>Most recent alert events</small></div><span className="alert-count">{alertHistory.length}</span></div>{alertHistory.length ? <div className="alert-list">{alertHistory.map((alert, index) => <div className="alert-item" key={alert._id ?? `${alert.timestamp}-${index}`}><span className="alert-icon">↗</span><div><b>{alert.ruleName ?? 'Rule alert'}</b><p>{alert.message}</p><small>{alert.sensorId} · {new Date(alert.timestamp).toLocaleString()}</small></div><span className="mock-status">MOCK</span></div>)}</div> : <div className="chart-empty">No alert actions recorded yet.</div>}</section></div></>}</div>}
       </section>
     </main>
     {connectionOpen && <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setConnectionOpen(false); }}><form className="connect-modal" onSubmit={token ? (event) => event.preventDefault() : connectAccount}><div className="modal-kicker">NEXUSFLOW API</div><button type="button" className="modal-close" aria-label="Close" onClick={() => setConnectionOpen(false)}>×</button><h2>{token ? 'API connection' : 'Connect your workspace'}</h2><p>{token ? `Signed in as ${account?.email ?? 'your account'}.` : 'Sign in to save rules to MongoDB and receive live telemetry over WebSockets.'}</p><label className="modal-label">API base URL</label><input className="modal-input" type="url" required readOnly={Boolean(token)} value={connectionForm.url} onChange={(event) => setConnectionForm((form) => ({ ...form, url: event.target.value }))} placeholder="http://localhost:4000"/>{!token && <><div className="auth-tabs"><button type="button" className={authMode === 'login' ? 'active' : ''} onClick={() => { setAuthMode('login'); setConnectionError(''); }}>Sign in</button><button type="button" className={authMode === 'register' ? 'active' : ''} onClick={() => { setAuthMode('register'); setConnectionError(''); }}>Create account</button></div><label className="modal-label">Email</label><input className="modal-input" type="email" required autoComplete="email" value={connectionForm.email} onChange={(event) => setConnectionForm((form) => ({ ...form, email: event.target.value }))} placeholder="you@company.com"/><label className="modal-label">Password</label><input className="modal-input" type="password" required minLength={8} autoComplete={authMode === 'login' ? 'current-password' : 'new-password'} value={connectionForm.password} onChange={(event) => setConnectionForm((form) => ({ ...form, password: event.target.value }))} placeholder="At least 8 characters"/></>}{connectionError && <div className="connection-error">{connectionError}</div>}<div className="modal-actions">{token ? <><button type="button" className="disconnect-button" onClick={disconnectAccount}>Disconnect</button><button type="button" className="primary-button" onClick={() => setConnectionOpen(false)}>Done</button></> : <button type="submit" className="primary-button" disabled={connectionBusy}>{connectionBusy ? 'Connecting…' : authMode === 'login' ? 'Sign in' : 'Create account'}</button>}</div><small className="modal-footnote">The API stores your rules and account data. Passwords are never saved in this browser.</small></form></div>}

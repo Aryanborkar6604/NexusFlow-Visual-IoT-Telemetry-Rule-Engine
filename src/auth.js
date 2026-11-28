@@ -24,7 +24,7 @@ export function requireAuth(req, res, next) {
 
 export function readToken(token) {
   const payload = jwt.verify(token, config.jwtSecret, { issuer: 'nexusflow' });
-  return { id: payload.sub, email: payload.email };
+  return { id: payload.sub, email: payload.email, expiresAt: payload.exp * 1000 };
 }
 
 export function registerAuthRoutes(app) {
