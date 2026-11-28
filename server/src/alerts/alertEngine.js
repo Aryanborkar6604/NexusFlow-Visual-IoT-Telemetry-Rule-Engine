@@ -1,11 +1,16 @@
+
 import { Alert } from '../models/Alert.js';
 import { isDbConnected } from '../config/db.js';
 import { sendMockSms } from './providers/mockSmsProvider.js';
 
-// In-memory fallback history and trigger debouncing
+// In-memory alert history
 const inMemoryAlerts = [];
+
+// Prevent repeated alerts for the same workflow, node and device
 const triggerCooldowns = new Map();
-const COOLDOWN_MS = 5000; // 5 second cooldown per workflow to prevent flood
+
+const COOLDOWN_MS = 5000;
+const MAX_ALERTS = 200;
 
 export class AlertEngine {
   constructor(socketServer = null) {
@@ -16,22 +21,48 @@ export class AlertEngine {
     this.socketServer = socketServer;
   }
 
-  async triggerAlert({ workflowId, workflowName = 'Workflow', nodeId, deviceId = 'DEVICE_001', factoryId = 'FACTORY_01', recipient, message, value }) {
-    const cooldownKey = `${workflowId}:${nodeId}`;
+  async triggerAlert({
+    workflowId,
+    workflowName = 'Workflow',
+    nodeId,
+    deviceId = 'DEVICE_001',
+    factoryId = 'FACTORY_01',
+    recipient,
+    message = 'Alert triggered. Current value: {{value}}',
+    value,
+  }) {
+    // Validate required information
+    if (!workflowId || !nodeId || !deviceId) {
+      console.warn(
+        '[AlertEngine] Missing workflowId, nodeId or deviceId.'
+      );
+      return null;
+    }
+
+    // Create a separate cooldown for each device
+    const cooldownKey = `${workflowId}:${nodeId}:${deviceId}`;
+
     const now = Date.now();
     const lastTrigger = triggerCooldowns.get(cooldownKey) || 0;
 
     if (now - lastTrigger < COOLDOWN_MS) {
-      // Cooldown active
       return null;
     }
+
+    // Set cooldown immediately to prevent duplicate triggers
     triggerCooldowns.set(cooldownKey, now);
 
-    // Format template message if {{value}} is present
-    const formattedMessage = message.replace('{{value}}', value);
+    // Format the alert message
+    const formattedMessage = String(message).replace(
+      /{{value}}/g,
+      String(value ?? 'N/A')
+    );
 
     const alertRecord = {
-      id: `alt_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      id: `alt_${Date.now()}_${Math.random()
+        .toString(36)
+        .substring(2, 8)}`,
+
       workflowId,
       workflowName,
       triggeredNodeId: nodeId,
@@ -39,46 +70,77 @@ export class AlertEngine {
       factoryId,
       recipient: recipient || '+15550001',
       message: formattedMessage,
-      value,
+      value: value ?? null,
       status: 'fired',
       createdAt: new Date().toISOString(),
     };
 
-    // 1. Dispatch SMS
+    // 1. Send mock SMS notification
     try {
       await sendMockSms({
         recipient: alertRecord.recipient,
         message: alertRecord.message,
         value: alertRecord.value,
       });
-    } catch (err) {
-      console.error(`[AlertEngine] SMS dispatch failed: ${err.message}`);
+    } catch (error) {
+      console.error(
+        '[AlertEngine] SMS dispatch failed:',
+        error.message
+      );
     }
 
-    // 2. In-memory buffer
+    // 2. Save alert in memory
     inMemoryAlerts.unshift(alertRecord);
-    if (inMemoryAlerts.length > 200) {
+
+    if (inMemoryAlerts.length > MAX_ALERTS) {
       inMemoryAlerts.pop();
     }
 
-    // 3. Socket.IO broadcast to dashboard
+    // 3. Send live alert through Socket.IO
     if (this.socketServer) {
-      this.socketServer.emitToFactory(factoryId, 'alert:new', alertRecord);
-      this.socketServer.emitToWorkflow(workflowId, 'alert:new', alertRecord);
+      try {
+        this.socketServer.emitToFactory(
+          factoryId,
+          'alert:new',
+          alertRecord
+        );
+
+        this.socketServer.emitToWorkflow(
+          workflowId,
+          'alert:new',
+          alertRecord
+        );
+      } catch (error) {
+        console.error(
+          '[AlertEngine] Socket broadcast failed:',
+          error.message
+        );
+      }
     }
 
-    // 4. Persistence
+    // 4. Save alert in MongoDB when connected
     if (isDbConnected()) {
-      Alert.create(alertRecord).catch((err) => {
-        console.error(`[AlertEngine] MongoDB persist failed: ${err.message}`);
-      });
+      try {
+        await Alert.create(alertRecord);
+      } catch (error) {
+        console.error(
+          '[AlertEngine] MongoDB persist failed:',
+          error.message
+        );
+      }
     }
 
     return alertRecord;
   }
 
+  // Get recent alerts from in-memory history
   getRecentAlerts(limit = 50) {
-    return inMemoryAlerts.slice(0, limit);
+    const safeLimit = Math.max(
+      0,
+      Math.min(Number.parseInt(limit, 10) || 50, MAX_ALERTS)
+    );
+
+    return inMemoryAlerts.slice(0, safeLimit);
   }
 }
 

@@ -1,4 +1,11 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+} from 'react';
+
 import { authService } from '../services/authService.js';
 
 const AuthContext = createContext(null);
@@ -7,7 +14,7 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => authService.getCurrentUser());
   const [token, setToken] = useState(() => authService.getToken());
 
-  // Demo auto-login if nothing stored so the app is instantly usable
+  // Demo login for local development
   useEffect(() => {
     if (!token) {
       const demoUser = {
@@ -17,20 +24,24 @@ export function AuthProvider({ children }) {
         role: 'manager',
         factoryId: 'FACTORY_01',
       };
-      const demoToken = 'demo_jwt_token_for_testing';
-      localStorage.setItem('nexusflow_token', demoToken);
+
+      // Development-only placeholder.
+      // The backend currently supports demo access without a token.
       localStorage.setItem('nexusflow_user', JSON.stringify(demoUser));
+
       setUser(demoUser);
-      setToken(demoToken);
     }
   }, [token]);
 
   const login = async (email, password) => {
     const data = await authService.login(email, password);
+
     localStorage.setItem('nexusflow_token', data.token);
     localStorage.setItem('nexusflow_user', JSON.stringify(data.user));
+
     setToken(data.token);
     setUser(data.user);
+
     return data;
   };
 
@@ -40,8 +51,16 @@ export function AuthProvider({ children }) {
     setUser(null);
   };
 
+  const value = {
+    user,
+    token,
+    login,
+    logout,
+    isAuthenticated: !!user,
+  };
+
   return (
-    <AuthContext.Provider value={{ user, token, login, logout, isAuthenticated: !!token }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );

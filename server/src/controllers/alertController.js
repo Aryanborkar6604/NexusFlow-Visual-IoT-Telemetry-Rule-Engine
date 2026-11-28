@@ -1,3 +1,4 @@
+
 import { alertEngine } from '../alerts/alertEngine.js';
 import { Alert } from '../models/Alert.js';
 import { isDbConnected } from '../config/db.js';
@@ -10,45 +11,91 @@ export function setAlertSocketServer(server) {
   socketServerRef = server;
 }
 
+// Get recent alerts
 export async function getAlerts(req, res) {
-  const factoryId = req.user?.factoryId || 'FACTORY_01';
-  const { limit = 50 } = req.query;
-
-  if (!isDbConnected()) {
-    const list = alertEngine.getRecentAlerts(Number(limit));
-    return res.json({ alerts: list });
-  }
-
   try {
+    const factoryId = req.user?.factoryId || 'FACTORY_01';
+
+    const requestedLimit = Number(req.query.limit || 50);
+
+    const limit = Number.isInteger(requestedLimit)
+      ? Math.min(Math.max(requestedLimit, 1), 200)
+      : 50;
+
+    if (!isDbConnected()) {
+      const list = alertEngine
+        .getRecentAlerts(limit)
+        .filter((alert) => alert.factoryId === factoryId);
+
+      return res.json({ alerts: list });
+    }
+
     const list = await Alert.find({ factoryId })
       .sort({ createdAt: -1 })
-      .limit(Number(limit));
-    res.json({ alerts: list });
+      .limit(limit)
+      .lean();
+
+    return res.json({ alerts: list });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('[AlertController] Failed to fetch alerts:', err.message);
+
+    return res.status(500).json({
+      message: 'Failed to fetch alerts',
+    });
   }
 }
 
-/**
- * Trigger an immediate simulated spike for live demo testing
- */
+// Trigger an immediate simulated spike for live demo testing
 export async function triggerDemoSpike(req, res) {
-  const { deviceId = 'TURBINE_001', temperature = 92.5 } = req.body;
+  try {
+    const {
+      deviceId = 'TURBINE_001',
+      temperature = 92.5,
+    } = req.body || {};
 
-  const spikeReading = {
-    deviceId,
-    factoryId: req.user?.factoryId || 'FACTORY_01',
-    temperature: Number(temperature),
-    pressure: 135,
-    humidity: 44,
-    timestamp: new Date().toISOString(),
-  };
+    if (
+      typeof deviceId !== 'string' ||
+      !/^[A-Za-z0-9_-]{1,50}$/.test(deviceId)
+    ) {
+      return res.status(400).json({
+        message: 'Invalid device ID',
+      });
+    }
 
-  const processed = ingestReading(spikeReading, socketServerRef);
-  updateDeviceReading(processed);
+    const numericTemperature = Number(temperature);
 
-  res.json({
-    message: `Injected simulated spike: ${temperature}°C on ${deviceId}`,
-    reading: processed,
-  });
+    if (
+      !Number.isFinite(numericTemperature) ||
+      numericTemperature < -50 ||
+      numericTemperature > 250
+    ) {
+      return res.status(400).json({
+        message: 'Temperature must be between -50°C and 250°C',
+      });
+    }
+
+    const spikeReading = {
+      deviceId,
+      factoryId: req.user?.factoryId || 'FACTORY_01',
+      temperature: numericTemperature,
+      pressure: 135,
+      humidity: 44,
+      timestamp: new Date().toISOString(),
+    };
+
+    const processed = ingestReading(spikeReading, socketServerRef);
+
+    updateDeviceReading(processed);
+
+    return res.json({
+      message: `Injected simulated spike: ${numericTemperature}°C on ${deviceId}`,
+      reading: processed,
+    });
+  } catch (err) {
+    console.error('[AlertController] Failed to trigger demo spike:', err.message);
+
+    return res.status(500).json({
+      message: 'Failed to trigger test spike',
+    });
+  }
 }
